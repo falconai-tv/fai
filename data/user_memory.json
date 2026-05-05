@@ -1,0 +1,83 @@
+{
+  "history": [
+    {
+      "query": "what happend in iran",
+      "intent": "unknown",
+      "timestamp": 1776978142,
+      "meta": {
+        "route": "web",
+        "confidence": 0.0
+      }
+    },
+    {
+      "query": "what happend in iran",
+      "intent": "unknown",
+      "timestamp": 1776978719,
+      "meta": {
+        "route": "web",
+        "confidence": 0.0
+      }
+    },
+    {
+      "query": "what happened in iran",
+      "intent": "unknown",
+      "timestamp": 1776978881,
+      "meta": {
+        "route": "web",
+        "confidence": 0.0
+      }
+    },
+    {
+      "query": "im happy",
+      "intent": "unknown",
+      "timestamp": 1777058758,
+      "meta": {
+        "route": "web",
+        "confidence": 0.0
+      }
+    },
+    {
+      "query": "i am sad",
+      "intent": "unknown",
+      "timestamp": 1777059453,
+      "meta": {
+        "route": "web",
+        "confidence": 0.0
+      }
+    }
+  ],
+  "preferences": {
+    "top_intents": [
+      [
+        "unknown",
+        5
+      ]
+    ],
+    "top_keywords": [
+      [
+        "what",
+        3
+      ],
+      [
+        "iran",
+        3
+      ],
+      [
+        "happend",
+        2
+      ],
+      [
+        "happened",
+        1
+      ],
+      [
+        "happy",
+        1
+      ]
+    ]
+  },
+  "stats": {
+    "total_queries": 5,
+    "last_updated": 1777059453
+  }
+}
