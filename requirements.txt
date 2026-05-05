@@ -1,4 +1,8 @@
-fastapi
-uvicorn
-pyttsx3
-gtts
+flask
+flask-cors
+gunicorn
+tensorflow-cpu
+opencv-python-headless
+pytesseract
+requests
+numpy
