@@ -31,20 +31,24 @@ def log_event(entry):
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
     except Exception as e:
-        print("[LOG ERROR]", e)
+        print(f"[LOG ERROR] {e}")
 
 def format_response(result):
+    if not result:
+        return {
+            "type": "text",
+            "data": {"text": "I encountered an error. Please try again.", "falcon_ai": "Error"}
+        }
+    
     if not isinstance(result, dict):
         return {
             "type": "text",
             "data": {"text": str(result), "falcon_ai": str(result)}
         }
-
     return result
 
 def init_system():
     global brain, router
-
     print("Loading FalconAI systems...\n")
 
     web_engine     = WebEngine()
@@ -54,7 +58,6 @@ def init_system():
     router = Router(music_engine, web_engine, weather_engine)
 
     brain  = FalconBrain()
-
     print("All systems ready!\n")
 
 def process_logic(user_input: str):
@@ -62,15 +65,26 @@ def process_logic(user_input: str):
 
     cleaned_input = cleaner.clean(user_input)
 
-    brain_result = brain.analyze(cleaned_input)
-    intent       = brain_result.get("intent", "unknown")
-    confidence   = brain_result.get("confidence", 0.0)
+    try:
+        brain_result = brain.analyze(cleaned_input)
+        intent       = brain_result.get("intent", "unknown")
+        confidence   = brain_result.get("confidence", 0.0)
+    except Exception as e:
+        print(f"[BRAIN ERROR] {e}")
+        intent, confidence = "unknown", 0.0
 
-    route_result = router.route(
-        cleaned_input,
-        intent=intent,
-        confidence=confidence
-    )
+    try:
+        route_result = router.route(
+            cleaned_input,
+            intent=intent,
+            confidence=confidence
+        )
+    except Exception as e:
+        print(f"[ROUTER ERROR] {e}")
+        route_result = {
+            "type": "text", 
+            "data": {"text": "My connection is a bit laggy. Can you repeat that?"}
+        }
 
     log_event({
         "timestamp":  datetime.now(timezone.utc).isoformat(),
@@ -78,7 +92,7 @@ def process_logic(user_input: str):
         "cleaned":    cleaned_input,
         "intent":     intent,
         "confidence": confidence,
-        "route":      route_result.get("type"),
+        "route":      route_result.get("type") if route_result else "error",
         "latency":    round(time.time() - start_time, 4)
     })
 
@@ -87,12 +101,12 @@ def process_logic(user_input: str):
 def print_banner():
     print("""
     ███████╗ █████╗ ██╗      ██████╗ ██████╗ ███╗    ██╗ █████╗ ██╗
-    ██╔════╝██╔══██╗██║     ██╔════╝██╔═══██╗████╗  ██║██╔══██╗██║
-    █████╗  ███████║██║     ██║     ██║   ██║██╔██╗ ██║███████║██║
-    ██╔══╝  ██╔══██║██║     ██║     ██║   ██║██║╚██╗██║██╔══██║██║
+    ██╔════╝██╔══██╗██║      ██╔════╝██╔═══██╗████╗  ██║██╔══██╗██║
+    █████╗  ███████║██║      ██║     ██║   ██║██╔██╗ ██║███████║██║
+    ██╔══╝  ██╔══██║██║      ██║     ██║   ██║██║╚██╗██║██╔══██║██║
     ██║     ██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║██║  ██║██║
     ╚═╝     ╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝
-                    V2 — Powered by FalconAI
+                     V2 — Powered by FalconAI
     """)
 
 print_banner()
