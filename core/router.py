@@ -1,5 +1,6 @@
 import logging
 import time
+import re
 
 logger = logging.getLogger("FalconAI.Router")
 
@@ -20,6 +21,7 @@ class Router:
             "watch_balkan_news": ["albania", "kosovo", "serbia", "balkan", "tirana", "pristina", "belgrade", "macedonia", "bosnia", "shqiperi", "kosova"],
             "weather_query": ["weather", "rain", "temperature", "forecast", "sunny", "snow", "wind", "humidity", "cold", "hot", "umbrella"],
             "person_search": ["elon", "musk", "trump", "biden", "zuckerberg", "bezos", "obama", "president", "prime minister", "ceo", "celebrity"],
+            "watch_movie":   ["movie", "film", "shiko", "play", "tubi", "pluto", "crackle", "cinema", "watch", "action movie", "horror movie", "comedy", "me gjej nje film"],
             "greeting":      ["hello", "hi", "hey", "morning", "evening", "afternoon", "howdy", "sup", "greetings"],
             "goodbye":       ["bye", "goodbye", "farewell", "see you later", "take care", "signing off", "i have to go", "gotta go"],
         }
@@ -34,25 +36,25 @@ class Router:
             "person_search": "world",
             "business_news": "business",
             "weather_query": "general",
+            "watch_movie": "vod"
         }
 
         self.MUSIC_INTENTS    = {"music_sad", "music_happy", "music_focus"}
         self.STATIC_INTENTS   = {"greeting", "goodbye"}
         self.STATIC_RESPONSES = {
-            "greeting": "Hello! How can I help you today?",
-            "goodbye":  "Goodbye! See you next time."
+            "greeting": "Hello! I'm FalconAI. How can I help you discover something today?",
+            "goodbye":  "Goodbye! I'll be here whenever you need more music or movies."
         }
 
     def route(self, user_input, intent="unknown", confidence=0.0):
         start_time = time.time()
         cleaned = self.clean_input(user_input)
 
-        if any(w in cleaned for w in ["hello", "hi ", "hey", "good morning", "good evening", "how are you"]):
-            if not any(w in cleaned for w in ["news", "war", "stock", "weather"]):
-                intent = "greeting"
-                confidence = 1.0
+        if any(w in cleaned for w in ["play movie", "watch movie", "shiko filmin", "film", "movie", "tubi", "pluto"]):
+            intent = "watch_movie"
+            confidence = 1.0
 
-        if any(w in cleaned for w in ["weather", "temperature", "forecast", "rain", "snow", "cold", "hot", "umbrella", "wind", "humid"]):
+        elif any(w in cleaned for w in ["weather", "temperature", "forecast", "rain", "snow"]):
             intent = "weather_query"
             confidence = 1.0
 
@@ -61,13 +63,18 @@ class Router:
             intent = music_intent
             confidence = 1.0
 
+        elif any(w in cleaned for w in ["hello", "hi ", "hey", "good morning", "good evening"]):
+            if not any(w in cleaned for w in ["news", "war", "stock", "weather", "movie"]):
+                intent = "greeting"
+                confidence = 1.0
+
         elif confidence < 0.75 or intent in ("unknown", "watch_news"):
             keyword_intent = self.keyword_fallback(cleaned)
             if keyword_intent:
                 logger.info(f"[ROUTER] Keyword override: {intent} -> {keyword_intent}")
                 intent = keyword_intent
 
-        if intent in ("unknown", "watch_news"):
+        if intent == "unknown":
             intent = "watch_news"
 
         logger.info(f"[ROUTER] Final Intent: {intent} ({confidence})")
@@ -79,25 +86,23 @@ class Router:
         elif intent in self.STATIC_INTENTS:
             result = self.static_response(self.STATIC_RESPONSES[intent])
             route_name = "text"
-        
-        elif intent == "watch_news":
-            channel_result = self.try_channel_match(cleaned)
-            
-            if channel_result:
-                result = channel_result
-                route_name = "channel"
-                
-            else:
-                result = self.web_engine.process(cleaned, intent="watch_news")
-                route_name = "web"
 
-        elif intent == "watch_channel":
-            result = self.web_engine.process(cleaned, intent=intent)
-            route_name = "channel"
-        
+        elif intent == "watch_movie":
+            result = self.web_engine.process(cleaned, intent="watch_movie")
+            route_name = "web_movie"
+
         elif intent == "weather_query":
             result = self.weather_engine.process(cleaned)
             route_name = "weather"
+
+        elif intent == "watch_news":
+            channel_result = self.try_channel_match(cleaned)
+            if channel_result:
+                result = channel_result
+                route_name = "channel"
+            else:
+                result = self.web_engine.process(cleaned, intent="watch_news")
+                route_name = "web"
 
         elif intent in self.intent_category_map:
             result = self.web_engine.process(cleaned, intent=intent)
@@ -113,101 +118,49 @@ class Router:
         return result
 
     def detect_music(self, text):
-        sad_words   = [
-            "sad", "depressed", "lonely", "heartbreak", "cry", "crying",
-            "grief", "miserable", "upset", "broken", "hurt", "i am down",
-            "feeling down", "feel down", "i feel depressed", "i am depressed",
-            "not feeling good", "feel bad", "i am not okay", "feel empty"
-        ]
-        happy_words = [
-            "happy", "excited", "party", "celebrate", "amazing", "fantastic",
-            "dance", "joy", "pumped", "energetic", "i feel great", "great mood",
-            "good mood", "feeling great", "i am happy"
-        ]
-        focus_words = [
-            "focus", "study", "concentrate", "lofi", "ambient", "homework",
-            "i am focused", "very focused", "need to focus", "music for work",
-            "coding music", "i want to focus", "studying", "i am working"
-        ]
+        sad_words   = ["sad", "depressed", "lonely", "heartbreak", "cry", "crying", "feel bad", "not okay"]
+        happy_words = ["happy", "excited", "party", "celebrate", "dance", "joy", "pumped", "great mood"]
+        focus_words = ["focus", "study", "concentrate", "lofi", "ambient", "homework", "coding", "working"]
 
-        if any(w in text for w in sad_words):
-            return "music_sad"
-        if any(w in text for w in happy_words):
-            return "music_happy"
-        if any(w in text for w in focus_words):
-            return "music_focus"
-
+        if any(w in text for w in sad_words): return "music_sad"
+        if any(w in text for w in happy_words): return "music_happy"
+        if any(w in text for w in focus_words): return "music_focus"
         return None
 
     def keyword_fallback(self, text):
-        text = text.lower()
         best_intent = None
         best_score  = 0
-
         for intent, keywords in self.keyword_map.items():
             score = sum(1 for kw in keywords if kw in text)
             if score > best_score:
                 best_score = score
                 best_intent = intent
-
         return best_intent if best_score > 0 else None
 
     def clean_input(self, text):
         text = text.lower().strip()
-        replacements = {
-            "im ":      "i am ",
-            "i'm ":     "i am ",
-            "whats":    "what is",
-            "happend":  "happened",
-            "deppress": "depressed",
-            "wanna":    "want to",
-            "gonna":    "going to"
-        }
+        replacements = {"im ": "i am ", "i'm ": "i am ", "whats": "what is", "wanna": "want to"}
         for k, v in replacements.items():
             text = text.replace(k, v)
         return text
 
     def static_response(self, text):
-        return {
-            "type": "text",
-            "data": {"text": text}
-        }
-
-    def fallback(self, text):
-        return {
-            "type": "text",
-            "data": {
-                "text": "I'm not sure how to help with that yet."
-            }
-        }
-
-    def debug_pipeline(self, original, cleaned, intent, confidence, route, latency):
-        print("\n[DEBUG PIPELINE]")
-        print(f"Input: {original}")
-        print(f"Cleaned: {cleaned}")
-        print(f"Intent: {intent}")
-        print(f"Confidence: {confidence}")
-        print(f"Route: {route}")
-        print(f"Latency: {latency}")
-        print("--------------------------\n")
+        return {"type": "text", "data": {"text": text}}
 
     def try_channel_match(self, text):
-        text = text.lower()
-        
-        keywords_map = {"iran": ["iran", "tehran", "israel iran", "middle east war"],"germany": ["germany", "berlin", "deutschland"],"ukraine": ["ukraine", "russia", "kyiv", "moscow"],"sports": ["football", "nba", "soccer", "match"],}
-        
         from core.channel_registry import CHANNELS
-        
+        keywords_map = {
+            "iran": ["iran", "middle east"],
+            "germany": ["germany", "berlin"],
+            "ukraine": ["ukraine", "russia"],
+            "sports": ["football", "soccer", "nba"]
+        }
         for topic, kws in keywords_map.items():
             if any(kw in text for kw in kws):
                 for ch in CHANNELS:
                     if topic in ch.name.lower():
-                        return {
-                            "type": "channel",
-                            "data": {
-                                "channel": ch.name,
-                                "url": ch.url
-                            }
-                        }
-                    
+                        return {"type": "channel", "data": {"channel": ch.name, "url": ch.url}}
         return None
+
+    def debug_pipeline(self, original, cleaned, intent, confidence, route, latency):
+        print(f"\n[DEBUG] In: {original} | Intent: {intent} | Route: {route} | Lat: {latency}s\n")
