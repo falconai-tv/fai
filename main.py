@@ -35,23 +35,12 @@ def log_event(entry):
 
 def format_response(result):
     if not isinstance(result, dict):
-        return str(result)
+        return {
+            "type": "text",
+            "data": {"text": str(result), "falcon_ai": str(result)}
+        }
 
-    data = result.get("data")
-    result_type = result.get("type")
-
-    if isinstance(data, dict):
-        voice_text = data.get("voice_text")
-
-        if voice_text and result_type != "music":
-            try:
-                speak(voice_text)
-            except:
-                pass
-
-        return data.get("text") or data.get("response") or str(data)
-
-    return str(data or "No response")
+    return result
 
 def init_system():
     global brain, router
@@ -63,11 +52,12 @@ def init_system():
     weather_engine = WeatherEngine()
 
     router = Router(music_engine, web_engine, weather_engine)
+
     brain  = FalconBrain()
 
     print("All systems ready!\n")
 
-def process(user_input: str):
+def process_logic(user_input: str):
     start_time = time.time()
 
     cleaned_input = cleaner.clean(user_input)
@@ -96,7 +86,7 @@ def process(user_input: str):
 
 def print_banner():
     print("""
-    ███████╗ █████╗ ██╗      ██████╗ ██████╗ ███╗   ██╗ █████╗ ██╗
+    ███████╗ █████╗ ██╗      ██████╗ ██████╗ ███╗    ██╗ █████╗ ██╗
     ██╔════╝██╔══██╗██║     ██╔════╝██╔═══██╗████╗  ██║██╔══██╗██║
     █████╗  ███████║██║     ██║     ██║   ██║██╔██╗ ██║███████║██║
     ██╔══╝  ██╔══██║██║     ██║     ██║   ██║██║╚██╗██║██╔══██║██║
@@ -116,16 +106,17 @@ def home():
 def api_process():
     try:
         data = request.json
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+            
         user_input = data.get("text", "").strip()
 
         if not user_input:
             return jsonify({"error": "No input provided"}), 400
 
-        response = process(user_input)
-        
-        return jsonify({
-            "falcon_ai": response
-        })
+        final_output = process_logic(user_input)
+
+        return jsonify(final_output)
 
     except Exception as e:
         if DEBUG:
@@ -134,4 +125,4 @@ def api_process():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=False)
