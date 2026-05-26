@@ -14,7 +14,7 @@ from engines.weather_engine import WeatherEngine
 from utils.text_cleaner import TextCleaner
 from utils.voice import speak
 
-from core.channels import find_best_channel  
+from core.channel_registry.py import find_best_channel  
 
 app = Flask(__name__)
 CORS(app) 
