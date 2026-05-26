@@ -14,6 +14,8 @@ from engines.weather_engine import WeatherEngine
 from utils.text_cleaner import TextCleaner
 from utils.voice import speak
 
+from core.channels import find_best_channel  
+
 app = Flask(__name__)
 CORS(app) 
 
@@ -37,15 +39,29 @@ def format_response(result):
     if not result:
         return {
             "type": "text",
-            "data": {"text": "I encountered an error. Please try again.", "falcon_ai": "Error"}
+            "text": "I encountered an error. Please try again.",
+            "falcon_ai": "Error"
         }
     
     if not isinstance(result, dict):
         return {
             "type": "text",
-            "data": {"text": str(result), "falcon_ai": str(result)}
+            "text": str(result),
+            "falcon_ai": str(result)
         }
-    return result
+
+    response_type = result.get("type", "text")
+    inner_data = result.get("data", {})
+
+    flat_response = {
+        "type": response_type
+    }
+
+    if isinstance(inner_data, dict):
+        for key, value in inner_data.items():
+            flat_response[key] = value
+            
+    return flat_response
 
 def init_system():
     global brain, router
@@ -62,8 +78,31 @@ def init_system():
 
 def process_logic(user_input: str):
     start_time = time.time()
-
     cleaned_input = cleaner.clean(user_input)
+
+    try:
+        best_channel = find_best_channel(cleaned_input)
+        if best_channel:
+            channel_route = {
+                "type": "channel",
+                "data": {
+                    "stream_url": best_channel.url,
+                    "channel_name": best_channel.name,
+                    "status": "success"
+                }
+            }
+            log_event({
+                "timestamp":  datetime.now(timezone.utc).isoformat(),
+                "input":      user_input,
+                "cleaned":    cleaned_input,
+                "intent":     "watch_tv",
+                "confidence": 1.0,
+                "route":      "channel",
+                "latency":    round(time.time() - start_time, 4)
+            })
+            return format_response(channel_route)
+    except Exception as e:
+        print(f"[CHANNEL MATCHER ERROR] {e}")
 
     try:
         brain_result = brain.analyze(cleaned_input)
@@ -90,7 +129,7 @@ def process_logic(user_input: str):
         "timestamp":  datetime.now(timezone.utc).isoformat(),
         "input":      user_input,
         "cleaned":    cleaned_input,
-        "intent":     intent,
+        "intent":     "unknown" if best_channel is None else "watch_tv",
         "confidence": confidence,
         "route":      route_result.get("type") if route_result else "error",
         "latency":    round(time.time() - start_time, 4)
@@ -129,7 +168,6 @@ def api_process():
             return jsonify({"error": "No input provided"}), 400
 
         final_output = process_logic(user_input)
-
         return jsonify(final_output)
 
     except Exception as e:
