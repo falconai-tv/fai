@@ -14,10 +14,8 @@ from engines.weather_engine import WeatherEngine
 from utils.text_cleaner import TextCleaner
 from utils.voice import speak
 
-from core.channel_registry import find_best_channel  
-
 app = Flask(__name__)
-CORS(app) 
+CORS(app)
 
 cleaner = TextCleaner()
 
@@ -27,22 +25,27 @@ LOG_FILE = "data/logs.jsonl"
 brain  = None
 router = None
 
+
 def log_event(entry):
     try:
         os.makedirs("data", exist_ok=True)
+
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
+
     except Exception as e:
         print(f"[LOG ERROR] {e}")
 
+
 def format_response(result):
+
     if not result:
         return {
             "type": "text",
             "text": "I encountered an error. Please try again.",
             "falcon_ai": "Error"
         }
-    
+
     if not isinstance(result, dict):
         return {
             "type": "text",
@@ -51,7 +54,7 @@ def format_response(result):
         }
 
     response_type = result.get("type", "text")
-    inner_data = result.get("data", {})
+    inner_data    = result.get("data", {})
 
     flat_response = {
         "type": response_type
@@ -60,82 +63,80 @@ def format_response(result):
     if isinstance(inner_data, dict):
         for key, value in inner_data.items():
             flat_response[key] = value
-            
+
     return flat_response
+
 
 def init_system():
     global brain, router
+
     print("Loading FalconAI systems...\n")
 
     web_engine     = WebEngine()
     music_engine   = MusicEngine()
     weather_engine = WeatherEngine()
 
-    router = Router(music_engine, web_engine, weather_engine)
+    router = Router(
+        music_engine,
+        web_engine,
+        weather_engine
+    )
 
-    brain  = FalconBrain()
+    brain = FalconBrain()
+
     print("All systems ready!\n")
 
+
 def process_logic(user_input: str):
+
     start_time = time.time()
+
     cleaned_input = cleaner.clean(user_input)
 
     try:
-        best_channel = find_best_channel(cleaned_input)
-        if best_channel:
-            channel_route = {
-                "type": "channel",
-                "data": {
-                    "stream_url": best_channel.url,
-                    "channel_name": best_channel.name,
-                    "status": "success"
-                }
-            }
-            log_event({
-                "timestamp":  datetime.now(timezone.utc).isoformat(),
-                "input":      user_input,
-                "cleaned":    cleaned_input,
-                "intent":     "watch_tv",
-                "confidence": 1.0,
-                "route":      "channel",
-                "latency":    round(time.time() - start_time, 4)
-            })
-            return format_response(channel_route)
-    except Exception as e:
-        print(f"[CHANNEL MATCHER ERROR] {e}")
-
-    try:
         brain_result = brain.analyze(cleaned_input)
-        intent       = brain_result.get("intent", "unknown")
-        confidence   = brain_result.get("confidence", 0.0)
+
+        intent     = brain_result.get("intent", "unknown")
+        confidence = brain_result.get("confidence", 0.0)
+
     except Exception as e:
+
         print(f"[BRAIN ERROR] {e}")
-        intent, confidence = "unknown", 0.0
+
+        intent     = "unknown"
+        confidence = 0.0
 
     try:
+
         route_result = router.route(
             cleaned_input,
             intent=intent,
             confidence=confidence
         )
+
     except Exception as e:
+
         print(f"[ROUTER ERROR] {e}")
+
         route_result = {
-            "type": "text", 
-            "data": {"text": "My connection is a bit laggy. Can you repeat that?"}
+            "type": "text",
+            "data": {
+                "text": "My connection is a bit laggy. Can you repeat that?"
+            }
         }
 
     log_event({
-        "timestamp":  datetime.now(timezone.utc).isoformat(),
-        "input":      user_input,
-        "cleaned":    cleaned_input,
-        "intent":     "unknown" if best_channel is None else "watch_tv",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "input": user_input,
+        "cleaned": cleaned_input,
+        "intent": intent,
         "confidence": confidence,
-        "route":      route_result.get("type") if route_result else "error",
-        "latency":    round(time.time() - start_time, 4)
+        "route": route_result.get("type") if route_result else "error",
+        "latency": round(time.time() - start_time, 4)
     })
 
     return format_response(route_result)
+
 
 def print_banner():
     print("""
@@ -148,33 +149,55 @@ def print_banner():
                      V2 — Powered by FalconAI
     """)
 
+
 print_banner()
 init_system()
+
 
 @app.route('/')
 def home():
     return "FalconAI API is online."
 
+
 @app.route('/process', methods=['POST'])
 def api_process():
+
     try:
+
         data = request.json
+
         if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-            
+            return jsonify({
+                "error": "No JSON data provided"
+            }), 400
+
         user_input = data.get("text", "").strip()
 
         if not user_input:
-            return jsonify({"error": "No input provided"}), 400
+            return jsonify({
+                "error": "No input provided"
+            }), 400
 
         final_output = process_logic(user_input)
+
         return jsonify(final_output)
 
     except Exception as e:
+
         if DEBUG:
             traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+
+        return jsonify({
+            "error": str(e)
+        }), 500
+
 
 if __name__ == "__main__":
+
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=False
+    )
