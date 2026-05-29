@@ -14,7 +14,7 @@ from engines.music_engine import MusicEngine
 from engines.weather_engine import WeatherEngine
 from utils.text_cleaner import TextCleaner
 
-from core.channels import find_best_channel
+from core.channel_registry import find_best_channel
 
 
 # =========================
