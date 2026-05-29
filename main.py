@@ -1,195 +1,175 @@
-import json
-import time
-import traceback
-import os
-from datetime import datetime, timezone
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+import re
+import requests
+import xml.etree.ElementTree as ET
+import logging
+from bs4 import BeautifulSoup
 
-from core.brain import FalconBrain
-from core.router import Router
-from engines.web_engine import WebEngine
-from engines.music_engine import MusicEngine
-from engines.weather_engine import WeatherEngine
-from utils.text_cleaner import TextCleaner
+logger = logging.getLogger("FalconAI.WebEngine")
 
+class WebEngine:
+    def __init__(self):
+        self.timeout = 5
 
-# OPTIONAL import (nuk e rrëzon app-in nëse mungon)
-try:
-    from core.channel_registry import find_best_channel
-except Exception:
-    find_best_channel = None
-
-
-app = Flask(__name__)
-CORS(app)
-
-cleaner = TextCleaner()
-
-DEBUG = True
-LOG_FILE = "data/logs.jsonl"
-
-brain = None
-router = None
-
-
-def log_event(entry):
-    try:
-        os.makedirs("data", exist_ok=True)
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry) + "\n")
-    except Exception as e:
-        print(f"[LOG ERROR] {e}")
-
-
-def format_response(result):
-    if not result:
-        return {
-            "type": "text",
-            "text": "I encountered an error. Please try again."
+        self.feeds = {
+            "world": [
+                "https://feeds.bbci.co.uk/news/world/rss.xml",
+                "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"
+            ],
+            "politics": [
+                "https://feeds.bbci.co.uk/news/politics/rss.xml",
+                "https://rss.politico.com/politics-news.xml"
+            ],
+            "business": [
+                "https://feeds.bbci.co.uk/news/business/rss.xml",
+                "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml"
+            ],
+            "technology": [
+                "https://feeds.bbci.co.uk/news/technology/rss.xml",
+                "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
+                "https://feeds.feedburner.com/TechCrunch",
+                "https://www.theverge.com/rss/index.xml"
+            ],
+            "balkan": [
+                "https://feeds.bbci.co.uk/news/world/europe/rss.xml",
+                "https://www.trtworld.com/rss",
+                "https://exit.al/feed/"
+            ],
+            "sports": ["https://feeds.bbci.co.uk/sport/rss.xml"],
+            "general": ["https://feeds.bbci.co.uk/news/rss.xml"]
         }
 
-    if not isinstance(result, dict):
-        return {
-            "type": "text",
-            "text": str(result)
+        self.movie_platforms = {
+            "tubi": "https://tubitv.com/search/",
+            "pluto": "https://pluto.tv/en/search/details/movies/",
+            "crackle": "https://www.crackle.com/search/",
+            "rakuten": "https://www.rakuten.tv/it/search?q="
         }
 
-    response_type = result.get("type", "text")
-    data = result.get("data", {})
+        self.intent_category = {
+            "watch_news": "world",
+            "watch_balkan_news": "balkan",
+            "tech_news": "technology",
+            "sports_news": "sports",
+            "business_news": "business",
+            "general_search": "general"
+        }
 
-    flat = {"type": response_type}
-
-    if isinstance(data, dict):
-        flat.update(data)
-
-    return flat
-
-
-def init_system():
-    global brain, router
-
-    print("Loading FalconAI systems...\n")
-
-    web_engine = WebEngine()
-    music_engine = MusicEngine()
-    weather_engine = WeatherEngine()
-
-    router = Router(music_engine, web_engine, weather_engine)
-    brain = FalconBrain()
-
-    print("All systems ready!\n")
-
-
-def process_logic(user_input: str):
-    start_time = time.time()
-    cleaned = cleaner.clean(user_input)
-
-    intent = "unknown"
-    confidence = 0.0
-
-    # ---------------------------
-    # 1. Optional TV CHANNEL STEP
-    # ---------------------------
-    channel_route = None
-
-    if find_best_channel:
+    def process(self, text: str, intent: str = None, category: str = None):
         try:
-            best_channel = find_best_channel(cleaned)
+            if intent == "watch_movie" or any(word in text.lower() for word in ["play movie", "shiko filmin", "search movie"]):
+                return self.handle_movie_intent(text)
 
-            if best_channel:
-                channel_route = {
-                    "type": "channel",
-                    "data": {
-                        "stream_url": best_channel.url,
-                        "channel_name": best_channel.name,
-                        "status": "success"
-                    }
-                }
-
-                log_event({
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "input": user_input,
-                    "cleaned": cleaned,
-                    "intent": "watch_tv",
-                    "route": "channel",
-                    "latency": round(time.time() - start_time, 4)
-                })
-
-                return format_response(channel_route)
+            return self.run_news_engine(text, intent, category)
 
         except Exception as e:
-            print(f"[CHANNEL ERROR] {e}")
+            logger.error(f"[WEB ERROR] {str(e)}")
+            return self.error_response()
 
-    # ---------------------------
-    # 2. BRAIN ANALYSIS
-    # ---------------------------
-    try:
-        brain_result = brain.analyze(cleaned)
-        intent = brain_result.get("intent", "unknown")
-        confidence = brain_result.get("confidence", 0.0)
-    except Exception as e:
-        print(f"[BRAIN ERROR] {e}")
+    def handle_movie_intent(self, query):
+        movie_name = re.sub(r'\b(play|watch|shiko|movie|film|search|find|me gjej)\b', '', query, flags=re.I).strip()
 
-    # ---------------------------
-    # 3. ROUTER
-    # ---------------------------
-    try:
-        route_result = router.route(
-            cleaned,
-            intent=intent,
-            confidence=confidence
-        )
-    except Exception as e:
-        print(f"[ROUTER ERROR] {e}")
-        route_result = {
-            "type": "text",
+        platform = "tubi"
+        base_url = self.movie_platforms[platform]
+
+        search_url = f"{base_url}{movie_name.replace(' ', '%20')}"
+
+        logger.info(f"[VOD] Routing '{movie_name}' to {platform.upper()}")
+
+        return {
+            "type": "web_movie",
             "data": {
-                "text": "Service temporarily unavailable."
+                "query": movie_name,
+                "platform": platform,
+                "stream_url": search_url,
+                "auto_play": True,
+                "falcon_ai": f"I'm opening {movie_name} on {platform.capitalize()}. Sit back and enjoy!"
             }
         }
 
-    # ---------------------------
-    # LOGGING
-    # ---------------------------
-    log_event({
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "input": user_input,
-        "cleaned": cleaned,
-        "intent": intent,
-        "confidence": confidence,
-        "route": route_result.get("type"),
-        "latency": round(time.time() - start_time, 4)
-    })
+    def run_news_engine(self, query, intent=None, category=None):
+        if category is None:
+            category = self.intent_category.get(intent, "general")
 
-    return format_response(route_result)
+        logger.info(f"[WEB NEWS] Category: {category}")
 
+        keywords = self.extract_keywords(query)
+        articles = self.fetch_articles(category)
+        filtered = self.filter_articles(articles, keywords)
 
-@app.route("/")
-def home():
-    return "FalconAI API is online."
+        if not filtered:
+            return self.fallback_response(query)
 
+        return self.format_response(filtered[:3], query)
 
-@app.route("/process", methods=["POST"])
-def api_process():
-    try:
-        data = request.json or {}
-        user_input = data.get("text", "").strip()
+    def fetch_articles(self, category):
+        articles = []
+        feeds = self.feeds.get(category, self.feeds["general"])
 
-        if not user_input:
-            return jsonify({"error": "No input provided"}), 400
+        for url in feeds:
+            try:
+                response = requests.get(url, timeout=self.timeout)
+                if response.status_code != 200: continue
+                root = ET.fromstring(response.content)
 
-        result = process_logic(user_input)
-        return jsonify(result)
+                for item in root.findall(".//item"):
+                    title = item.findtext("title", "")
+                    link  = item.findtext("link", "")
+                    desc  = item.findtext("description", "")
+                    if title and link:
+                        articles.append({"title": title, "link": link, "description": desc})
+            except: continue
+        return articles
 
-    except Exception as e:
-        if DEBUG:
-            traceback.print_exc()
+    def fetch_full_article(self, url):
+        try:
+            response = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+            if response.status_code != 200: return ""
+            
+            soup = BeautifulSoup(response.content, "html.parser")
+            for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                tag.decompose()
 
-        return jsonify({"error": str(e)}), 500
+            article_body = soup.find("article") or soup.find("div", class_=re.compile(r"article|content|body", re.I))
+            target = article_body if article_body else soup
+            paragraphs = target.find_all("p")
+            texts = [p.get_text().strip() for p in paragraphs if len(p.get_text().strip()) > 45]
+            
+            full_text = " ".join(texts)
+            return full_text[:1500].strip() if len(full_text) > 1500 else full_text.strip()
+        except: return ""
 
+    def extract_keywords(self, text):
+        stopwords = {"what", "happened", "in", "the", "is", "now", "tell", "about", "latest", "news"}
+        return [w for w in text.lower().split() if w not in stopwords and len(w) > 2]
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    init_system()
-    app.run(host="0.0.0.0", port=port, debug=False)
+    def filter_articles(self, articles, keywords):
+        if not keywords: return articles[:3]
+        scored = []
+        for art in articles:
+            text = (art["title"] + " " + art.get("description", "")).lower()
+            score = sum(1 for kw in keywords if kw in text)
+            if score > 0: scored.append((score, art))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [a[1] for a in scored]
+
+    def format_response(self, articles, query):
+        voice_parts = [f"Here's the latest on {query}."]
+        for i, art in enumerate(articles, 1):
+            full_text = self.fetch_full_article(art['link'])
+            desc = full_text if full_text else art.get('description', '')
+            voice_parts.append(f"Article {i}. {art['title']}. {desc[:300]}")
+
+        return {
+            "type": "web",
+            "data": {
+                "query": query,
+                "articles": articles,
+                "voice_text": " ".join(voice_parts)
+            }
+        }
+
+    def error_response(self):
+        return {"type": "error", "data": {"text": "I encountered an issue accessing the web."}}
+
+    def fallback_response(self, query):
+        return {"type": "web", "data": {"query": query, "articles": [], "text": "No specific news found."}}
