@@ -79,6 +79,7 @@ def init_system():
 def process_logic(user_input: str):
     start_time = time.time()
     cleaned_input = cleaner.clean(user_input)
+    best_channel = None
 
     try:
         best_channel = find_best_channel(cleaned_input)
