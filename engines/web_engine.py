@@ -66,25 +66,90 @@ class WebEngine:
             return self.error_response()
 
     def handle_movie_intent(self, query):
-        movie_name = re.sub(r'\b(play|watch|shiko|movie|film|search|find|me gjej)\b', '', query, flags=re.I).strip()
 
-        platform = "tubi"
-        base_url = self.movie_platforms[platform]
+    movie_name = re.sub(
+        r'\b(play|watch|shiko|movie|film|search|find|me gjej)\b',
+        '',
+        query,
+        flags=re.I
+    ).strip()
 
-        search_url = f"{base_url}{movie_name.replace(' ', '%20')}"
+    platform = "tubi"
 
-        logger.info(f"[VOD] Routing '{movie_name}' to {platform.upper()}")
+    search_url = (
+        f"https://tubitv.com/search/"
+        f"{movie_name.replace(' ', '%20')}"
+    )
+
+    logger.info(
+        f"[MOVIE SEARCH] Searching movie: {movie_name}"
+    )
+
+    try:
+
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        response = requests.get(
+            search_url,
+            headers=headers,
+            timeout=8
+        )
+
+        html = response.text
+
+        movie_match = re.search(
+            r'"/movies/(\d+)/([^"]+)"',
+            html
+        )
+
+        if movie_match:
+
+            movie_id = movie_match.group(1)
+            movie_slug = movie_match.group(2)
+
+            direct_url = (
+                f"https://tubitv.com/movies/"
+                f"{movie_id}/{movie_slug}"
+            )
+
+            logger.info(
+                f"[MOVIE FOUND] {direct_url}"
+            )
+
+            return {
+                "type": "web_movie",
+                "data": {
+                    "query": movie_name,
+                    "platform": platform,
+                    "stream_url": direct_url,
+                    "auto_play": True,
+                    "fullscreen": True,
+                    "falcon_ai":
+                        f"Playing {movie_name} now."
+                }
+            }
+
+        logger.warning(
+            f"[MOVIE NOT FOUND] {movie_name}"
+        )
 
         return {
-            "type": "web_movie",
+            "type": "web",
             "data": {
-                "query": movie_name,
-                "platform": platform,
-                "stream_url": search_url,
-                "auto_play": True,
-                "falcon_ai": f"I'm opening {movie_name} on {platform.capitalize()}. Sit back and enjoy!"
+                "text":
+                    f"I couldn't find {movie_name}."
             }
         }
+
+    except Exception as e:
+
+        logger.error(
+            f"[MOVIE ERROR] {str(e)}"
+        )
+
+        return self.error_response()
 
     def run_news_engine(self, query, intent=None, category=None):
         if category is None:
