@@ -66,91 +66,90 @@ class WebEngine:
             return self.error_response()
 
     def handle_movie_intent(self, query):
+        movie_name = re.sub(
+            r'\b(play|watch|shiko|movie|film|search|find|me gjej)\b',
+            '',
+            query,
+            flags=re.I
+        ).strip()
 
-    movie_name = re.sub(
-        r'\b(play|watch|shiko|movie|film|search|find|me gjej)\b',
-        '',
-        query,
-        flags=re.I
-    ).strip()
+        platform = "tubi"
 
-    platform = "tubi"
-
-    search_url = (
-        f"https://tubitv.com/search/"
-        f"{movie_name.replace(' ', '%20')}"
-    )
-
-    logger.info(
-        f"[MOVIE SEARCH] Searching movie: {movie_name}"
-    )
-
-    try:
-
-        headers = {
-            "User-Agent": "Mozilla/5.0"
-        }
-
-        response = requests.get(
-            search_url,
-            headers=headers,
-            timeout=8
+        search_url = (
+            f"https://tubitv.com/search/"
+            f"{movie_name.replace(' ', '%20')}"
         )
 
-        html = response.text
-
-        movie_match = re.search(
-            r'"/movies/(\d+)/([^"]+)"',
-            html
+        logger.info(
+            f"[MOVIE SEARCH] Searching movie: {movie_name}"
         )
 
-        if movie_match:
+        try:
 
-            movie_id = movie_match.group(1)
-            movie_slug = movie_match.group(2)
+            headers = {
+                "User-Agent": "Mozilla/5.0"
+            }
 
-            direct_url = (
-                f"https://tubitv.com/movies/"
-                f"{movie_id}/{movie_slug}"
+            response = requests.get(
+                search_url,
+                headers=headers,
+                timeout=8
             )
 
-            logger.info(
-                f"[MOVIE FOUND] {direct_url}"
+            html = response.text
+
+            movie_match = re.search(
+                r'"/movies/(\d+)/([^"]+)"',
+                html
+            )
+
+            if movie_match:
+
+                movie_id = movie_match.group(1)
+                movie_slug = movie_match.group(2)
+
+                direct_url = (
+                    f"https://tubitv.com/movies/"
+                    f"{movie_id}/{movie_slug}"
+                )
+
+                logger.info(
+                    f"[MOVIE FOUND] {direct_url}"
+                )
+
+                return {
+                    "type": "web_movie",
+                    "data": {
+                        "query": movie_name,
+                        "platform": platform,
+                        "stream_url": direct_url,
+                        "auto_play": True,
+                        "fullscreen": True,
+                        "falcon_ai":
+                            f"Playing {movie_name} now."
+                    }
+                }
+
+            logger.warning(
+                f"[MOVIE NOT FOUND] {movie_name}"
             )
 
             return {
-                "type": "web_movie",
+                "type": "web",
                 "data": {
-                    "query": movie_name,
-                    "platform": platform,
-                    "stream_url": direct_url,
-                    "auto_play": True,
-                    "fullscreen": True,
-                    "falcon_ai":
-                        f"Playing {movie_name} now."
+                    "text":
+                        f"I couldn't find {movie_name}."
                 }
             }
 
-        logger.warning(
-            f"[MOVIE NOT FOUND] {movie_name}"
-        )
+        except Exception as e:
 
-        return {
-            "type": "web",
-            "data": {
-                "text":
-                    f"I couldn't find {movie_name}."
-            }
-        }
+            logger.error(
+                f"[MOVIE ERROR] {str(e)}"
+            )
 
-    except Exception as e:
-
-        logger.error(
-            f"[MOVIE ERROR] {str(e)}"
-        )
-
-        return self.error_response()
-
+            return self.error_response()
+    
     def run_news_engine(self, query, intent=None, category=None):
         if category is None:
             category = self.intent_category.get(intent, "general")
