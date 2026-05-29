@@ -34,15 +34,12 @@ class WebEngine:
                 "https://www.trtworld.com/rss",
                 "https://exit.al/feed/"
             ],
-            "sports": ["https://feeds.bbci.co.uk/sport/rss.xml"],
-            "general": ["https://feeds.bbci.co.uk/news/rss.xml"]
-        }
-
-        self.movie_platforms = {
-            "tubi": "https://tubitv.com/search/",
-            "pluto": "https://pluto.tv/en/search/details/movies/",
-            "crackle": "https://www.crackle.com/search/",
-            "rakuten": "https://www.rakuten.tv/it/search?q="
+            "sports": [
+                "https://feeds.bbci.co.uk/sport/rss.xml"
+            ],
+            "general": [
+                "https://feeds.bbci.co.uk/news/rss.xml"
+            ]
         }
 
         self.intent_category = {
@@ -56,7 +53,32 @@ class WebEngine:
 
     def process(self, text: str, intent: str = None, category: str = None):
         try:
-            if intent == "watch_movie" or any(word in text.lower() for word in ["play movie", "shiko filmin", "search movie"]):
+            lowered = text.lower()
+
+            movie_keywords = [
+                "movie",
+                "film",
+                "watch",
+                "play",
+                "shiko",
+                "cinema",
+                "series",
+                "episode",
+                "netflix",
+                "tubi",
+                "anime",
+                "action",
+                "comedy",
+                "horror",
+                "thriller",
+                "drama",
+                "sci fi"
+            ]
+
+            if (
+                intent == "watch_movie" or
+                any(word in lowered for word in movie_keywords)
+            ):
                 return self.handle_movie_intent(text)
 
             return self.run_news_engine(text, intent, category)
@@ -67,89 +89,31 @@ class WebEngine:
 
     def handle_movie_intent(self, query):
         movie_name = re.sub(
-            r'\b(play|watch|shiko|movie|film|search|find|me gjej)\b',
+            r'\b(play|watch|shiko|movie|film|search|find|me gjej|luaj)\b',
             '',
             query,
             flags=re.I
         ).strip()
 
-        platform = "tubi"
+        if not movie_name:
+            movie_name = query.strip()
 
-        search_url = (
-            f"https://tubitv.com/search/"
-            f"{movie_name.replace(' ', '%20')}"
-        )
+        search_query = movie_name.replace(" ", "%20")
 
-        logger.info(
-            f"[MOVIE SEARCH] Searching movie: {movie_name}"
-        )
+        stream_url = f"https://tubitv.com/search/{search_query}"
 
-        try:
+        logger.info(f"[MOVIE] Opening {movie_name}")
 
-            headers = {
-                "User-Agent": "Mozilla/5.0"
+        return {
+            "type": "web_movie",
+            "data": {
+                "query": movie_name,
+                "stream_url": stream_url,
+                "auto_play": True,
+                "text": f"Opening {movie_name}"
             }
+        }
 
-            response = requests.get(
-                search_url,
-                headers=headers,
-                timeout=8
-            )
-
-            html = response.text
-
-            movie_match = re.search(
-                r'"/movies/(\d+)/([^"]+)"',
-                html
-            )
-
-            if movie_match:
-
-                movie_id = movie_match.group(1)
-                movie_slug = movie_match.group(2)
-
-                direct_url = (
-                    f"https://tubitv.com/movies/"
-                    f"{movie_id}/{movie_slug}"
-                )
-
-                logger.info(
-                    f"[MOVIE FOUND] {direct_url}"
-                )
-
-                return {
-                    "type": "web_movie",
-                    "data": {
-                        "query": movie_name,
-                        "platform": platform,
-                        "stream_url": direct_url,
-                        "auto_play": True,
-                        "fullscreen": True,
-                        "falcon_ai":
-                            f"Playing {movie_name} now."
-                    }
-                }
-
-            logger.warning(
-                f"[MOVIE NOT FOUND] {movie_name}"
-            )
-
-            return {
-                "type": "web",
-                "data": {
-                    "text":
-                        f"I couldn't find {movie_name}."
-                }
-            }
-
-        except Exception as e:
-
-            logger.error(
-                f"[MOVIE ERROR] {str(e)}"
-            )
-
-            return self.error_response()
-    
     def run_news_engine(self, query, intent=None, category=None):
         if category is None:
             category = self.intent_category.get(intent, "general")
@@ -157,7 +121,9 @@ class WebEngine:
         logger.info(f"[WEB NEWS] Category: {category}")
 
         keywords = self.extract_keywords(query)
+
         articles = self.fetch_articles(category)
+
         filtered = self.filter_articles(articles, keywords)
 
         if not filtered:
@@ -171,57 +137,153 @@ class WebEngine:
 
         for url in feeds:
             try:
-                response = requests.get(url, timeout=self.timeout)
-                if response.status_code != 200: continue
+                response = requests.get(
+                    url,
+                    timeout=self.timeout
+                )
+
+                if response.status_code != 200:
+                    continue
+
                 root = ET.fromstring(response.content)
 
                 for item in root.findall(".//item"):
                     title = item.findtext("title", "")
-                    link  = item.findtext("link", "")
-                    desc  = item.findtext("description", "")
+                    link = item.findtext("link", "")
+                    desc = item.findtext("description", "")
+
                     if title and link:
-                        articles.append({"title": title, "link": link, "description": desc})
-            except: continue
+
+                        articles.append({
+                            "title": title,
+                            "link": link,
+                            "description": desc
+                        })
+
+            except Exception as e:
+                logger.error(f"[RSS ERROR] {e}")
+
         return articles
 
     def fetch_full_article(self, url):
         try:
-            response = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
-            if response.status_code != 200: return ""
-            
-            soup = BeautifulSoup(response.content, "html.parser")
-            for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+            response = requests.get(
+                url,
+                timeout=8,
+                headers={
+                    "User-Agent": "Mozilla/5.0"
+                }
+            )
+
+            if response.status_code != 200:
+                return ""
+
+            soup = BeautifulSoup(
+                response.content,
+                "html.parser"
+            )
+
+            for tag in soup([
+                "script",
+                "style",
+                "nav",
+                "footer",
+                "header",
+                "aside"
+            ]):
                 tag.decompose()
 
-            article_body = soup.find("article") or soup.find("div", class_=re.compile(r"article|content|body", re.I))
+            article_body = (
+                soup.find("article") or
+                soup.find("div", class_=re.compile(r"article|content|body", re.I))
+            )
+
             target = article_body if article_body else soup
             paragraphs = target.find_all("p")
-            texts = [p.get_text().strip() for p in paragraphs if len(p.get_text().strip()) > 45]
-            
+
+            texts = [
+                p.get_text().strip()
+                for p in paragraphs
+                if len(p.get_text().strip()) > 45
+            ]
+
             full_text = " ".join(texts)
-            return full_text[:1500].strip() if len(full_text) > 1500 else full_text.strip()
-        except: return ""
+
+            if len(full_text) > 1500:
+                return full_text[:1500].strip()
+
+            return full_text.strip()
+
+        except Exception as e:
+            logger.error(f"[ARTICLE ERROR] {e}")
+            return ""
 
     def extract_keywords(self, text):
-        stopwords = {"what", "happened", "in", "the", "is", "now", "tell", "about", "latest", "news"}
-        return [w for w in text.lower().split() if w not in stopwords and len(w) > 2]
+        stopwords = {
+            "what",
+            "happened",
+            "in",
+            "the",
+            "is",
+            "now",
+            "tell",
+            "about",
+            "latest",
+            "news"
+        }
+
+        return [
+            w for w in text.lower().split()
+            if w not in stopwords and len(w) > 2
+        ]
 
     def filter_articles(self, articles, keywords):
-        if not keywords: return articles[:3]
+        if not keywords:
+            return articles[:3]
+
         scored = []
         for art in articles:
-            text = (art["title"] + " " + art.get("description", "")).lower()
-            score = sum(1 for kw in keywords if kw in text)
-            if score > 0: scored.append((score, art))
-        scored.sort(key=lambda x: x[0], reverse=True)
+            text = (
+                art["title"] + " " +
+                art.get("description", "")
+            ).lower()
+
+            score = sum(
+                1 for kw in keywords
+                if kw in text
+            )
+
+            if score > 0:
+                scored.append((score, art))
+
+        scored.sort(
+            key=lambda x: x[0],
+            reverse=True
+        )
+
         return [a[1] for a in scored]
 
     def format_response(self, articles, query):
-        voice_parts = [f"Here's the latest on {query}."]
+        voice_parts = [
+            f"Here's the latest on {query}."
+        ]
+
         for i, art in enumerate(articles, 1):
-            full_text = self.fetch_full_article(art['link'])
-            desc = full_text if full_text else art.get('description', '')
-            voice_parts.append(f"Article {i}. {art['title']}. {desc[:300]}")
+            full_text = self.fetch_full_article(
+                art['link']
+            )
+
+            desc = (
+                full_text
+                if full_text
+                else art.get('description', '')
+            )
+
+            voice_parts.append(
+                f"Article {i}. "
+                f"{art['title']}. "
+                f"{desc[:300]}"
+            )
 
         return {
             "type": "web",
@@ -233,7 +295,19 @@ class WebEngine:
         }
 
     def error_response(self):
-        return {"type": "error", "data": {"text": "I encountered an issue accessing the web."}}
+        return {
+            "type": "error",
+            "data": {
+                "text": "I encountered an issue accessing the web."
+            }
+        }
 
     def fallback_response(self, query):
-        return {"type": "web", "data": {"query": query, "articles": [], "text": "No specific news found."}}
+        return {
+            "type": "web",
+            "data": {
+                "query": query,
+                "articles": [],
+                "text": "No specific news found."
+            }
+        }
