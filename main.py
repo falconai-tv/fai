@@ -16,7 +16,7 @@ from utils.text_cleaner import TextCleaner
 
 # OPTIONAL import (nuk e rrëzon app-in nëse mungon)
 try:
-    from core.channels import find_best_channel
+    from core.channel_registry import find_best_channel
 except Exception:
     find_best_channel = None
 
