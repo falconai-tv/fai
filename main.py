@@ -3,48 +3,67 @@ import sys
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# Sigurohemi që Python mund të gjejë folderin 'engines'
+# Sigurohemi që Python të gjejë folderat 'core' dhe 'engines' në nivelin rrënjë (root)
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 app = Flask(__name__)
-CORS(app)  # Lejon kërkesat nga aplikacioni dhe web-i pa bllokime CORS
+CORS(app)  # Lejon kërkesat nga Web (Fetch) dhe Android pa bllokime CORS
 
-# --- INICIALIZIMI I ROUTER-IT ---
 ai_router = None
 
-def initialize_router():
+def initialize_falcon_system():
     """
-    Funksion për të instancuar IntentRouter me error handling të plotë.
-    Ndihmon në identifikimin e saktë të problemeve gjatë boot-it në Railway.
+    Inicializon të gjithë motorët e FalconAI dhe i injekton ato te Router-i kryesor.
+    Përdor try-except për të kapur çdo gabim specifik gjatë ndezjes (boot).
     """
     global ai_router
     try:
-        # Importimi bëhet brenda try që të kapim çdo dështim të librarive (si openai, requests etj.)
-        from engines.router import IntentRouter
-        ai_router = IntentRouter()
-        print("✅ FalconAI: Router u inicializua me sukses.")
-    except ImportError as e:
-        print(f"❌ GABIM IMPORTI: Mungon një librari në requirements.txt: {e}")
+        print("⏳ Duke inicializuar motorët e FalconAI...")
+        
+        # 1. Importet e moduleve tuaja
+        from engines.music import MusicEngine
+        from engines.web import WebEngine
+        from engines.weather import WeatherEngine
+        from core.router import Router  # Sipas skedarit tuaj core/router.py
+        
+        # 2. Instancimi i motorëve individualë
+        music_geo = MusicEngine()
+        web_geo = WebEngine()
+        weather_geo = WeatherEngine()
+        
+        # 3. Krijimi i Router-it duke i kaluar të 3 argumentet e domosdoshme
+        ai_router = Router(
+            music_engine=music_geo, 
+            web_engine=web_geo, 
+            weather_engine=weather_geo
+        )
+        
+        print("✅ FalconAI: Të gjitha sistemet u ndezën dhe u lidhën me sukses!")
+        
+    except ImportError as ie:
+        print(f"❌ GABIM IMPORTI: Mungon ndonjë skedar ose librari në requirements.txt: {str(ie)}")
+        ai_router = None
     except Exception as e:
-        print(f"❌ GABIM BOOT: Klasa IntentRouter dështoi: {e}")
+        print(f"❌ GABIM KRITIK GJATË BOOT: Klasa Router dështoi të krijohet: {str(e)}")
+        ai_router = None
 
-# Thirrja e inicializimit në momentin që nis scripti
-initialize_router()
+# Thirrja e funksionit të inicializimit kur ndizet serveri në Railway
+initialize_falcon_system()
 
 @app.route('/')
 def health_check():
-    """Endpoint për të parë nëse serveri është gjallë dhe nëse Router është gati."""
+    """Endpoint për të parë statusin e serverit përpara se të dërgosh kërkesa."""
     return jsonify({
         "status": "online",
-        "router_ready": ai_router is not None,
-        "environment": "production"
+        "router_initialized": ai_router is not None,
+        "message": "FalconAI Server is up and running."
     }), 200
 
 @app.route('/process', methods=['POST'])
 def process():
     global ai_router
     
-    # Kontrolli i parë: Nëse router nuk është inicializuar, mos provo më tej
+    # Sigurohemi që Router-i është gati përpara se të pranojmë kërkesën
     if ai_router is None:
         return jsonify({
             "status": "error",
@@ -54,32 +73,31 @@ def process():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({"status": "error", "message": "No JSON data provided"}), 400
+            return jsonify({"status": "error", "message": "No JSON payload received"}), 400
 
-        # Kapim tekstin pavarësisht nëse vjen si 'query' apo 'text'
-        user_input = data.get('query') or data.get('text')
+        # Sinkronizimi: Pranon 'query' nga Android dhe 'text' nga testi në Web
+        user_query = data.get('query') or data.get('text')
         
-        if not user_input:
+        if not user_query:
             return jsonify({"status": "error", "message": "Missing 'query' or 'text' field"}), 400
 
-        print(f"🚀 Processing: {user_input}")
-
-        # Thirrja e motorit të AI (handle duhet të kthejë një fjalor/dict)
-        # Supozojmë se handle kthen të dhënat që pret Android (WeatherActivity, News, etj.)
-        response_data = ai_router.handle(user_input)
+        # Thirrja e metodës të saktë .route() që ke definuar te core/router.py
+        # Kjo metodë kthen automatikisht 'result' (dict) që pret aplikacioni
+        response_data = ai_router.route(user_query)
         
+        # Sigurohemi që nëse kthehet dict i thjeshtë, Flask e kthen në JSON valid me kodin 200
         return jsonify(response_data), 200
 
     except Exception as e:
         print(f"❌ GABIM GJATË PROCESIMIT: {str(e)}")
         return jsonify({
             "status": "error",
-            "message": f"Server encountered an error: {str(e)}"
+            "message": f"An error occurred inside the router: {str(e)}"
         }), 500
 
-# --- KONFIGURIMI I PORTËS PËR RAILWAY ---
+# --- KOORDINIMI I PORTËS PËR RAILWAY ---
 if __name__ == '__main__':
-    # Railway injekton portën automatikisht përmes variablës PORT
+    # Railway përdor portën dinamike përmes variablës së mjedisit PORT
     port = int(os.environ.get("PORT", 5000))
-    # '0.0.0.0' është e domosdoshme që serveri të jetë i aksesueshëm nga jashtë
+    # '0.0.0.0' lejon aplikacionin Android jashtë rrjetit lokal të lidhet me serverin
     app.run(host='0.0.0.0', port=port, debug=False)
