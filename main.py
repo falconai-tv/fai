@@ -6,23 +6,26 @@ from flask_cors import CORS
 # Sigurohemi që folderi rrënjë është në path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from core.brain import FalconBrain
-from core.router import Router
-from engines.web_engine import WebEngine
-from engines.music_engine import MusicEngine
-from engines.weather_engine import WeatherEngine
-from engines.channels_engine import ChannelsEngine
-
 app = Flask(__name__)
 CORS(app)
 
-# Inicializojmë variablat globalë si None në fillim
+# Inicializojmë variablat globalë
 brain = None
 router = None
 
 def init_all():
     global brain, router
     try:
+        print("--- Duke nisur inicializimin e motorëve... ---")
+        
+        # Importet brenda funksionit për të kapur gabimet specifike
+        from engines.web_engine import WebEngine
+        from engines.music_engine import MusicEngine
+        from engines.weather_engine import WeatherEngine
+        from engines.channels_engine import ChannelsEngine
+        from core.router import Router
+        from core.brain import FalconBrain
+
         web_engine = WebEngine()
         music_engine = MusicEngine()
         weather_engine = WeatherEngine()
@@ -34,21 +37,30 @@ def init_all():
             weather_engine=weather_engine, 
             channels_engine=channels_engine
         )
+        
+        print("--- Duke ngarkuar FalconBrain (ML Model)... ---")
         brain = FalconBrain()
-        print("--- FalconAI: Sistemet u ngarkuan me sukses ---")
+        
+        print("--- [SUCCESS] FalconAI është gati! ---")
     except Exception as e:
-        print(f"GABIM GJATË NISJES: {e}")
+        # KJO DO TË NA TREGOJË GABIMIN E SAKTË TE RAILWAY LOGS
+        print(f"--- [ERROR] Dështoi inicializimi: {str(e)} ---")
+        import traceback
+        traceback.print_exc()
 
-# Thirrim inicializimin
+# Thirrim inicializimin menjëherë
 init_all()
 
 @app.route('/')
 def index():
-    return jsonify({"status": "online", "system": "FalconAI"}), 200
+    return jsonify({
+        "status": "online",
+        "brain_ready": brain is not None,
+        "router_ready": router is not None
+    }), 200
 
 @app.route('/process', methods=['POST'])
 def process_request():
-    # KJO ËSHTË PJESA QË DUHET:
     global brain, router 
     
     try:
@@ -58,17 +70,15 @@ def process_request():
         
         user_text = data['text']
 
-        # Kontrollojmë nëse brain u inicializua saktë
         if brain is None:
-            return jsonify({"status": "error", "message": "System is booting or brain is not defined"}), 500
+            return jsonify({
+                "status": "error", 
+                "message": "Brain is not defined. Kontrollo Railway Logs për gabimin e importit."
+            }), 500
 
-        # Procesimi
         intent_data = brain.process(user_text)
         response = router.route(intent_data)
         
-        if 'status' not in response:
-            response['status'] = 'success'
-            
         return jsonify(response), 200
 
     except Exception as e:
