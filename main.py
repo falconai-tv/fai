@@ -21,9 +21,9 @@ def initialize_falcon_system():
         print("⏳ Duke inicializuar motorët e FalconAI...")
         
         # 1. Importet e moduleve tuaja
-        from engines.music import MusicEngine
-        from engines.web import WebEngine
-        from engines.weather import WeatherEngine
+        from engines.music_engine import MusicEngine
+        from engines.web_engine import WebEngine
+        from engines.weather_engine import WeatherEngine
         from core.router import Router  # Sipas skedarit tuaj core/router.py
         
         # 2. Instancimi i motorëve individualë
