@@ -1,115 +1,85 @@
 import os
 import sys
-import traceback
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# Sigurohemi që folderi root është në path
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(BASE_DIR)
-
-from core.brain import FalconBrain
-from core.router import Router
-from engines.web_engine import WebEngine
-from engines.music_engine import MusicEngine
-from engines.weather_engine import WeatherEngine
-from engines.channels_engine import ChannelsEngine
+# Sigurohemi që Python mund të gjejë folderin 'engines'
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Lejon kërkesat nga aplikacioni dhe web-i pa bllokime CORS
 
-# Variablat globale të inicializuara si None
-router = None
-brain = None
+# --- INICIALIZIMI I ROUTER-IT ---
+ai_router = None
 
-def boot_system():
-    global router, brain
-    print("--- FalconAI: Starting Boot Sequence ---")
-    
+def initialize_router():
+    """
+    Funksion për të instancuar IntentRouter me error handling të plotë.
+    Ndihmon në identifikimin e saktë të problemeve gjatë boot-it në Railway.
+    """
+    global ai_router
     try:
-        # Inicializojmë motorët një nga një për të kapur fajtorin
-        print("Initializing engines...")
-        w_engine = WebEngine()
-        m_engine = MusicEngine()
-        we_engine = WeatherEngine()
-        c_engine = ChannelsEngine()
-        
-        # Inicializojmë Router-in
-        router = Router(
-            music_engine=m_engine, 
-            web_engine=w_engine, 
-            weather_engine=we_engine, 
-            channels_engine=c_engine
-        )
-        print("✅ Router & Engines: READY")
-        
+        # Importimi bëhet brenda try që të kapim çdo dështim të librarive (si openai, requests etj.)
+        from engines.router import IntentRouter
+        ai_router = IntentRouter()
+        print("✅ FalconAI: Router u inicializua me sukses.")
+    except ImportError as e:
+        print(f"❌ GABIM IMPORTI: Mungon një librari në requirements.txt: {e}")
     except Exception as e:
-        print("❌ CRITICAL ERROR during Engine initialization:")
-        traceback.print_exc() # Kjo do të tregojë rreshtin fiks pse dështon
+        print(f"❌ GABIM BOOT: Klasa IntentRouter dështoi: {e}")
 
-    try:
-        print("Loading ML Brain...")
-        brain = FalconBrain()
-        print("✅ ML Brain: READY")
-    except Exception as e:
-        print(f"⚠️ Warning: Brain failed to load: {e}")
-
-# Ekzekutojmë boot-in përpara se Flask të nisin
-boot_system()
-
-def heuristic_layer(text):
-    t = text.lower().strip()
-    if any(word in t for word in ["weather", "moti", "tirana", "forecast"]):
-        return {"intent": "get_weather", "entities": {"location": text}, "confidence": 1.0}
-    if any(word in t for word in ["play", "luaj", "music", "kenga"]):
-        return {"intent": "play_music", "entities": {"query": text}, "confidence": 1.0}
-    return None
+# Thirrja e inicializimit në momentin që nis scripti
+initialize_router()
 
 @app.route('/')
-def index():
-    status = "online" if router else "partial_error"
-    return jsonify({"status": status, "system": "FalconAI", "version": "2.1.5"}), 200
+def health_check():
+    """Endpoint për të parë nëse serveri është gjallë dhe nëse Router është gati."""
+    return jsonify({
+        "status": "online",
+        "router_ready": ai_router is not None,
+        "environment": "production"
+    }), 200
 
 @app.route('/process', methods=['POST'])
-def process_request():
-    global router, brain
+def process():
+    global ai_router
     
-    # Siguria e fundit: Nëse router dështoi në boot, provo inicializim emergjent
-    if router is None:
+    # Kontrolli i parë: Nëse router nuk është inicializuar, mos provo më tej
+    if ai_router is None:
         return jsonify({
-            "status": "error", 
+            "status": "error",
             "message": "Router not initialized. Check server logs for boot errors."
         }), 500
 
     try:
         data = request.get_json()
-        if not data or 'text' not in data:
-            return jsonify({"status": "error", "message": "No text provided"}), 400
-        
-        user_text = data['text']
-        
-        # 1. Heuristics
-        intent_data = heuristic_layer(user_text)
-        
-        # 2. Brain
-        if not intent_data:
-            if brain:
-                intent_data = brain.process(user_text)
-            else:
-                intent_data = {"intent": "web_search", "entities": {"query": user_text}, "confidence": 0.5}
+        if not data:
+            return jsonify({"status": "error", "message": "No JSON data provided"}), 400
 
-        # 3. Route
-        response = router.route(intent_data)
+        # Kapim tekstin pavarësisht nëse vjen si 'query' apo 'text'
+        user_input = data.get('query') or data.get('text')
         
-        if 'status' not in response:
-            response['status'] = 'success'
-            
-        return jsonify(response), 200
+        if not user_input:
+            return jsonify({"status": "error", "message": "Missing 'query' or 'text' field"}), 400
+
+        print(f"🚀 Processing: {user_input}")
+
+        # Thirrja e motorit të AI (handle duhet të kthejë një fjalor/dict)
+        # Supozojmë se handle kthen të dhënat që pret Android (WeatherActivity, News, etj.)
+        response_data = ai_router.handle(user_input)
+        
+        return jsonify(response_data), 200
 
     except Exception as e:
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print(f"❌ GABIM GJATË PROCESIMIT: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Server encountered an error: {str(e)}"
+        }), 500
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
+# --- KONFIGURIMI I PORTËS PËR RAILWAY ---
+if __name__ == '__main__':
+    # Railway injekton portën automatikisht përmes variablës PORT
+    port = int(os.environ.get("PORT", 5000))
+    # '0.0.0.0' është e domosdoshme që serveri të jetë i aksesueshëm nga jashtë
     app.run(host='0.0.0.0', port=port, debug=False)
