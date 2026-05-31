@@ -4,8 +4,9 @@ import traceback
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# Shtohet rruga për importet e moduleve core dhe engines
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Sigurohemi që folderi root është në path
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(BASE_DIR)
 
 from core.brain import FalconBrain
 from core.router import Router
@@ -17,76 +18,68 @@ from engines.channels_engine import ChannelsEngine
 app = Flask(__name__)
 CORS(app)
 
-print("--- FalconAI: Booting System ---")
+# Variablat globale të inicializuara si None
+router = None
+brain = None
 
-# --- Inicializimi Global ---
-# I nxjerrim jashtë try/except që të jemi sigurt që 'router' ekziston gjithmonë
-try:
-    web_engine = WebEngine()
-    music_engine = MusicEngine()
-    weather_engine = WeatherEngine()
-    channels_engine = ChannelsEngine()
+def boot_system():
+    global router, brain
+    print("--- FalconAI: Starting Boot Sequence ---")
+    
+    try:
+        # Inicializojmë motorët një nga një për të kapur fajtorin
+        print("Initializing engines...")
+        w_engine = WebEngine()
+        m_engine = MusicEngine()
+        we_engine = WeatherEngine()
+        c_engine = ChannelsEngine()
+        
+        # Inicializojmë Router-in
+        router = Router(
+            music_engine=m_engine, 
+            web_engine=w_engine, 
+            weather_engine=we_engine, 
+            channels_engine=c_engine
+        )
+        print("✅ Router & Engines: READY")
+        
+    except Exception as e:
+        print("❌ CRITICAL ERROR during Engine initialization:")
+        traceback.print_exc() # Kjo do të tregojë rreshtin fiks pse dështon
 
-    router = Router(
-        music_engine=music_engine, 
-        web_engine=web_engine, 
-        weather_engine=weather_engine, 
-        channels_engine=channels_engine
-    )
-    print("--- Router & Engines: Ready ---")
-except Exception as e:
-    print(f"CRITICAL ERROR INITIALIZING ENGINES: {str(e)}")
-    traceback.print_exc()
-    router = None
+    try:
+        print("Loading ML Brain...")
+        brain = FalconBrain()
+        print("✅ ML Brain: READY")
+    except Exception as e:
+        print(f"⚠️ Warning: Brain failed to load: {e}")
 
-# Brain kërkon ngarkim modeli ML, ndaj e trajtojmë me kujdes
-try:
-    brain = FalconBrain()
-    print("--- ML Brain: Loaded ---")
-except Exception as e:
-    print(f"WARNING: Brain could not load: {str(e)}")
-    brain = None
+# Ekzekutojmë boot-in përpara se Flask të nisin
+boot_system()
 
 def heuristic_layer(text):
-    """
-    Korigjon gabimet e klasifikimit përpara se të shkojnë te AI.
-    Zgjidhja për rastet si 'weather in Tirana'.
-    """
     t = text.lower().strip()
-    
-    # Weather keywords
-    if any(word in t for word in ["weather", "moti", "temperatura", "forecast"]):
-        return {
-            "intent": "get_weather", 
-            "entities": {"location": text}, 
-            "confidence": 1.0,
-            "method": "heuristic"
-        }
-    
-    # Music keywords
-    if any(word in t for word in ["play", "luaj", "muzik", "music", "kenga"]):
-        return {
-            "intent": "play_music", 
-            "entities": {"query": text}, 
-            "confidence": 1.0,
-            "method": "heuristic"
-        }
-
+    if any(word in t for word in ["weather", "moti", "tirana", "forecast"]):
+        return {"intent": "get_weather", "entities": {"location": text}, "confidence": 1.0}
+    if any(word in t for word in ["play", "luaj", "music", "kenga"]):
+        return {"intent": "play_music", "entities": {"query": text}, "confidence": 1.0}
     return None
 
 @app.route('/')
 def index():
-    return jsonify({
-        "status": "online",
-        "system": "FalconAI",
-        "version": "2.1.2",
-        "erind_mode": True
-    }), 200
+    status = "online" if router else "partial_error"
+    return jsonify({"status": status, "system": "FalconAI", "version": "2.1.5"}), 200
 
 @app.route('/process', methods=['POST'])
 def process_request():
-    # Sigurohemi që Flask i sheh variablat globale
     global router, brain
+    
+    # Siguria e fundit: Nëse router dështoi në boot, provo inicializim emergjent
+    if router is None:
+        return jsonify({
+            "status": "error", 
+            "message": "Router not initialized. Check server logs for boot errors."
+        }), 500
 
     try:
         data = request.get_json()
@@ -94,45 +87,29 @@ def process_request():
             return jsonify({"status": "error", "message": "No text provided"}), 400
         
         user_text = data['text']
-        print(f"Input: {user_text}")
-
-        # Kontrolli 1: Heuristics (Prioritet mbi AI)
+        
+        # 1. Heuristics
         intent_data = heuristic_layer(user_text)
-
-        # Kontrolli 2: ML Brain (Nëse Heuristics nuk gjen gjë)
+        
+        # 2. Brain
         if not intent_data:
             if brain:
                 intent_data = brain.process(user_text)
-                intent_data["method"] = "ml_brain"
             else:
-                # Fallback nëse modeli nuk është ngarkuar
                 intent_data = {"intent": "web_search", "entities": {"query": user_text}, "confidence": 0.5}
 
-        # Kontrolli 3: Ekzekutimi via Router
-        if router:
-            response = router.route(intent_data)
-        else:
-            return jsonify({"status": "error", "message": "Router not initialized"}), 500
-
-        # Shtojmë info për debug në Android Logcat
+        # 3. Route
+        response = router.route(intent_data)
+        
         if 'status' not in response:
             response['status'] = 'success'
-        
-        response['debug_intent'] = intent_data.get('intent')
-        response['debug_method'] = intent_data.get('method')
             
         return jsonify(response), 200
 
     except Exception as e:
-        print(f"Error processing request: {str(e)}")
         traceback.print_exc()
-        return jsonify({
-            "status": "error", 
-            "message": "Internal processing error",
-            "details": str(e)
-        }), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == "__main__":
-    # Railway përdor variablën PORT
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port, debug=False)
