@@ -1,120 +1,76 @@
+import os
+import sys
 from flask import Flask, request, jsonify
-import logging
+from flask_cors import CORS
 
-from core.channel_registry import ChannelRegistry
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from core.brain import FalconBrain
+from core.router import Router
 from engines.web_engine import WebEngine
-from engines.weather_engine import WeatherEngine
 from engines.music_engine import MusicEngine
-
-# -------------------------
-# INIT APP
-# -------------------------
+from engines.weather_engine import WeatherEngine
+from engines.channels_engine import ChannelsEngine
 app = Flask(__name__)
+CORS(app)
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("FalconAI")
+print("--- FalconAI Booting ---")
 
-# -------------------------
-# INIT MODULES
-# -------------------------
-channel_registry = ChannelRegistry()
-web_engine = WebEngine()
-weather_engine = WeatherEngine()
-music_engine = MusicEngine()
+try:
+    web_engine = WebEngine()
+    music_engine = MusicEngine()
+    weather_engine = WeatherEngine()
+    channels_engine = ChannelsEngine()
 
+    router = Router(
+        music_engine=music_engine, 
+        web_engine=web_engine, 
+        weather_engine=weather_engine, 
+        channels_engine=channels_engine
+    )
 
-# -------------------------
-# CHANNEL HANDLER
-# -------------------------
-def handle_channel(text: str):
-    """
-    Channels are STRICT MATCH ONLY by name.
-    """
-    return channel_registry.get_channel(text)
+    brain = FalconBrain()
+    
+    print("--- All Systems Ready (ML Model Loaded) ---")
+except Exception as e:
+    print(f"FATAL ERROR DURING BOOT: {str(e)}")
 
+@app.route('/')
+def index():
+    return jsonify({
+        "status": "online",
+        "system": "FalconAI",
+        "version": "2.0.0"
+    }), 200
 
-# -------------------------
-# ROUTER LOGIC
-# -------------------------
-def route(text: str):
-    if not text:
-        return {
-            "type": "error",
-            "data": {"text": "Empty input"}
-        }
-
-    t = text.lower().strip()
-
-    # ---------------- CHANNELS (highest priority)
-    channel = handle_channel(text)
-    if channel:
-        return {
-            "type": "channel",
-            "data": channel
-        }
-
-    # ---------------- WEATHER
-    if "weather" in t:
-        return weather_engine.process(text)
-
-    # ---------------- MUSIC
-    if any(k in t for k in ["music", "song", "spotify", "audio", "play song"]):
-        return music_engine.process(text)
-
-    # ---------------- MOVIE / VIDEO / STREAM
-    if any(k in t for k in [
-        "movie", "film", "watch", "netflix",
-        "tubi", "action", "series", "episode"
-    ]):
-        return web_engine.process(text, intent="watch_movie")
-
-    # ---------------- NEWS / SEARCH DEFAULT
-    return web_engine.process(text, intent="general_search")
-
-
-# -------------------------
-# MAIN API ENDPOINT
-# -------------------------
-@app.route("/process", methods=["POST"])
-def process():
+@app.route('/process', methods=['POST'])
+def process_request():
     try:
-        data = request.get_json(force=True)
-        text = data.get("text", "").strip()
+        data = request.get_json()
+        
+        if not data or 'text' not in data:
+            return jsonify({"status": "error", "message": "No text provided"}), 400
+        
+        user_text = data['text']
+        print(f"User Input: {user_text}")
 
-        logger.info(f"[INPUT] {text}")
+        intent_data = brain.process(user_text)
 
-        result = route(text)
-        return jsonify(result)
+        response = router.route(intent_data)
+
+        if 'status' not in response:
+            response['status'] = 'success'
+            
+        return jsonify(response), 200
 
     except Exception as e:
-        logger.error(f"[ERROR] {str(e)}")
-
+        print(f"Processing Error: {str(e)}")
         return jsonify({
-            "type": "error",
-            "data": {
-                "text": "Internal server error"
-            }
-        })
+            "status": "error", 
+            "message": "Internal processing error",
+            "details": str(e)
+        }), 500
 
-
-# -------------------------
-# HEALTH CHECK
-# -------------------------
-@app.route("/", methods=["GET"])
-def health():
-    return jsonify({
-        "status": "ok",
-        "service": "FalconAI Backend",
-        "version": "1.0.0"
-    })
-
-
-# -------------------------
-# START SERVER
-# -------------------------
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=8080,
-        debug=False
-    )
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port, debug=False)
