@@ -13,14 +13,23 @@ class FalconBrain:
         }
 
     def analyze(self, text: str, context: Dict = None) -> Dict[str, Any]:
-        base_prediction = predict(text)
+        try:
+            base_prediction = predict(text)
+            if not isinstance(base_prediction, dict):
+                base_prediction = {"intent": "unknown", "confidence": 0.0, "source": "fallback"}
+        except Exception as e:
+            print("[Brain Predict Error]", e)
+            base_prediction = {"intent": "unknown", "confidence": 0.0, "source": "error_fallback"}
 
         intent = base_prediction.get("intent", "unknown")
         confidence = base_prediction.get("confidence", 0.0)
 
-        boost = get_intent_boost(text)
-        if intent in boost:
-            confidence += boost[intent]
+        try:
+            boost = get_intent_boost(text)
+            if isinstance(boost, dict) and intent in boost:
+                confidence += boost[intent]
+        except Exception as e:
+            print("[Brain Boost Error]", e)
 
         confidence = min(confidence, 1.0)
 
@@ -38,19 +47,22 @@ class FalconBrain:
         intent = analysis["intent"]
         confidence = analysis["confidence"]
 
-        # ✅ FIX: parametrat në rend të saktë
         route_result = router.route(text, intent, confidence)
+
+        if route_result is None:
+            route_result = {"type": "fallback", "data": {"text": "I encountered an empty response."}}
+        elif not isinstance(route_result, dict):
+            route_result = {"type": "fallback", "data": {"text": str(route_result)}}
 
         try:
             save_interaction(text, intent, {
                 "confidence": confidence,
-                "engine": route_result.get("type")
+                "engine": route_result.get("type", "unknown")
             })
         except Exception as e:
             print("[Memory Error]", e)
 
-        # ✅ FIX: kontrollo saktë tipin e route_result
-        if route_result.get("type") in ("text", "fallback"):
+        if route_result.get("type") in ("text", "fallback", "error"):
             self.stats["fallbacks"] += 1
         else:
             self.stats["successful"] += 1
@@ -66,11 +78,12 @@ class FalconBrain:
 
     def debug(self, user_id: str, text: str, router):
         result = self.process(user_id, text, router)
+        engine_type = result["result"].get("type") if isinstance(result.get("result"), dict) else "unknown"
         return {
             "input": text,
             "intent": result["intent"],
             "confidence": result["confidence"],
-            "engine": result["result"].get("type"),
+            "engine": engine_type,
             "latency_ms": result["latency"] * 1000,
             "stats": self.stats
         }
