@@ -3,7 +3,9 @@ import sys
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 from core.brain import FalconBrain
 from core.router import Router
@@ -13,9 +15,16 @@ from engines.weather_engine import WeatherEngine
 from engines.sports_engine import SportsEngine
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 print("--- FalconAI Booting ---")
+
+web_engine = None
+music_engine = None
+weather_engine = None
+sports_engine = None
+router = None
+brain = None
 
 try:
     web_engine = WebEngine()
@@ -31,7 +40,6 @@ try:
     )
 
     brain = FalconBrain()
-    
     print("--- All Systems Ready (ML Model Loaded) ---")
 except Exception as e:
     print(f"FATAL ERROR DURING BOOT: {str(e)}")
@@ -44,9 +52,19 @@ def index():
         "version": "2.1.0"
     }), 200
 
-@app.route('/process', methods=['POST'])
+@app.route('/process', methods=['POST', 'OPTIONS'])
 def process_request():
+    # Menaxhimi i kërkesës pre-flight të browser-it
+    if request.method == 'OPTIONS':
+        return jsonify({"status": "ok"}), 200
+
     try:
+        if brain is None or router is None:
+            return jsonify({
+                "status": "error",
+                "message": "FalconBrain is not initialized properly. Check boot logs."
+            }), 500
+
         data = request.get_json()
         
         if not data or 'text' not in data:
@@ -58,7 +76,6 @@ def process_request():
         print(f"User Input: {user_text}")
 
         brain_response = brain.process(user_id=user_id, text=user_text, router=router)
-
         final_response = brain_response.get("result", {})
 
         if isinstance(final_response, dict) and 'status' not in final_response:
