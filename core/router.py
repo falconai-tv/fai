@@ -5,10 +5,11 @@ import re
 logger = logging.getLogger("FalconAI.Router")
 
 class Router:
-    def __init__(self, music_engine, web_engine, weather_engine):
+    def __init__(self, music_engine, web_engine, weather_engine, sports_engine):
         self.music_engine = music_engine
         self.web_engine = web_engine
         self.weather_engine = weather_engine
+        self.sports_engine = sports_engine
 
         self.keyword_map = {
             "music_sad":     ["sad", "depressed", "lonely", "heartbreak", "cry", "grief", "miserable", "down", "upset", "broken", "hurt", "pain", "crying", "merzi"],
@@ -17,6 +18,7 @@ class Router:
             "business_news": ["stock", "market", "bitcoin", "crypto", "economy", "shares", "trading", "finance", "inflation", "gold price"],
             "tech_news":     ["tech", "ai", "iphone", "google", "apple", "software", "hardware", "robot", "startup", "microsoft", "tesla", "spacex"],
             "sports_news":   ["sport", "football", "basketball", "nba", "soccer", "tennis", "formula", "league", "match", "score"],
+            "sports_analysis": ["analizo", "taktika", "skema", "loja live", "boterori", "botërori", "world cup", "pse po humb", "pse po fiton", "topi", "fusha"],
             "watch_war":     ["war", "conflict", "ukraine", "iran", "missile", "military", "attack", "nato", "russia", "israel", "gaza", "bomb"],
             "watch_balkan_news": ["albania", "kosovo", "serbia", "balkan", "tirana", "pristina", "shqiperi", "kosova"],
             "weather_query": ["weather", "rain", "temperature", "forecast", "sunny", "snow", "wind", "moti", "temp"],
@@ -32,6 +34,7 @@ class Router:
             "watch_balkan_news": "balkan",
             "tech_news": "technology",
             "sports_news": "sports",
+            "sports_analysis": "sports",
             "business_news": "business",
             "weather_query": "general",
             "watch_movie": "vod"
@@ -57,6 +60,10 @@ class Router:
             if music_intent:
                 intent = music_intent
                 confidence = 1.0
+
+        if intent == "unknown" and any(w in cleaned for w in ["analizo", "loja live", "boterori", "botërori", "taktika"]):
+            intent = "sports_analysis"
+            confidence = 1.0
 
         if intent == "unknown" and any(w in cleaned for w in ["weather", "temperature", "forecast", "moti"]):
             intent = "weather_query"
@@ -91,7 +98,11 @@ class Router:
                 result = self.weather_engine.process(cleaned)
                 route_name = "weather"
 
-            elif intent == "watch_news":
+            elif intent == "sports_analysis":
+                result = self.sports_engine.process(cleaned)
+                route_name = "sports_live"
+
+            elif intent == "watch_news" or intent == "sports_news":
                 channel_result = self.try_channel_match(cleaned)
                 if channel_result:
                     result = channel_result
