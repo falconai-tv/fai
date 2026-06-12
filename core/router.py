@@ -17,7 +17,7 @@ class Router:
             "music_focus":   ["focus", "study", "concentrate", "work", "coding", "productive", "lofi", "ambient", "homework", "reading", "focused", "mesim"],
             "business_news": ["stock", "market", "bitcoin", "crypto", "economy", "shares", "trading", "finance", "inflation", "gold price"],
             "tech_news":     ["tech", "ai", "iphone", "google", "apple", "software", "hardware", "robot", "startup", "microsoft", "tesla", "spacex"],
-            "sports_news":   ["sport", "football", "basketball", "nba", "soccer", "tennis", "formula", "league", "match", "score"],
+            "sports_news":   ["sport", "football", "basketball", "nba", "soccer", "tennis", "formula", "league", "match", "score", "ndeshja", "futboll"],
             "sports_analysis": ["analizo", "taktika", "skema", "loja live", "boterori", "botërori", "world cup", "pse po humb", "pse po fiton", "topi", "fusha"],
             "watch_war":     ["war", "conflict", "ukraine", "iran", "missile", "military", "attack", "nato", "russia", "israel", "gaza", "bomb"],
             "watch_balkan_news": ["albania", "kosovo", "serbia", "balkan", "tirana", "pristina", "shqiperi", "kosova"],
@@ -61,7 +61,8 @@ class Router:
                 intent = music_intent
                 confidence = 1.0
 
-        if intent == "unknown" and any(w in cleaned for w in ["analizo", "loja live", "boterori", "botërori", "taktika"]):
+        # Kontroll i shpejtë për fjalët kyçe sportive për të rritur saktësinë e intent-it
+        if intent == "unknown" and any(w in cleaned for w in ["analizo", "loja live", "boterori", "botërori", "taktika", "ndeshja", "match", "futboll"]):
             intent = "sports_analysis"
             confidence = 1.0
 
@@ -98,11 +99,12 @@ class Router:
                 result = self.weather_engine.process(cleaned)
                 route_name = "weather"
 
-            elif intent == "sports_analysis":
+            # KORRIGJIMI: Si sports_analysis ashtu edhe sports_news dërgohen te Sports Engine
+            elif intent == "sports_analysis" or intent == "sports_news":
                 result = self.sports_engine.process(cleaned)
                 route_name = "sports_live"
 
-            elif intent == "watch_news" or intent == "sports_news":
+            elif intent == "watch_news":
                 channel_result = self.try_channel_match(cleaned)
                 if channel_result:
                     result = channel_result
