@@ -10,7 +10,6 @@ class FalconPredictor:
     def __init__(self):
         self.model = None
         self.vectorizer = None
-
         self._load_assets()
 
     def _load_assets(self):
@@ -21,10 +20,10 @@ class FalconPredictor:
             with open(VECTORIZER_PATH, "rb") as f:
                 self.vectorizer = pickle.load(f)
 
-            print("ML model loaded")
+            print("ML model successfully loaded into memory!")
 
         except Exception as e:
-            print("Failed to load model:", e)
+            print("Failed to load model assets:", e)
             self.model = None
             self.vectorizer = None
 
@@ -54,7 +53,7 @@ class FalconPredictor:
                 }
 
             except Exception as e:
-                print("ML error:", e)
+                print("ML inference error:", e)
                 return self._fallback(text, 0.0)
 
         return self._fallback(text, 0.0)
@@ -92,8 +91,13 @@ class FalconPredictor:
             "source": "fallback"
         }
 
-_predictor_instance = FalconPredictor()
-
+_predictor_instance = None
 
 def predict(text: str) -> Dict:
+    global _predictor_instance
+
+    if _predictor_instance is None:
+        print("[Lazy Loading] Initializing FalconPredictor on first active request...")
+        _predictor_instance = FalconPredictor()
+        
     return _predictor_instance.predict(text)
