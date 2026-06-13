@@ -12,20 +12,20 @@ class Router:
         self.sports_engine = sports_engine
 
         self.keyword_map = {
-            "music_sad":     ["sad", "depressed", "lonely", "heartbreak", "cry", "grief", "miserable", "down", "upset", "broken", "hurt", "pain", "crying", "merzi"],
-            "music_happy":   ["happy", "excited", "party", "celebrate", "great", "amazing", "fantastic", "dance", "joy", "fun", "pumped", "energetic", "gezuar"],
-            "music_focus":   ["focus", "study", "concentrate", "work", "coding", "productive", "lofi", "ambient", "homework", "reading", "focused", "mesim"],
+            "music_sad":     ["sad", "depressed", "lonely", "heartbreak", "cry", "grief", "miserable", "down", "upset", "broken", "hurt", "pain", "crying"],
+            "music_happy":   ["happy", "excited", "party", "celebrate", "great", "amazing", "fantastic", "dance", "joy", "fun", "pumped", "energetic"],
+            "music_focus":   ["focus", "study", "concentrate", "work", "coding", "productive", "lofi", "ambient", "homework", "reading", "focused"],
             "business_news": ["stock", "market", "bitcoin", "crypto", "economy", "shares", "trading", "finance", "inflation", "gold price"],
             "tech_news":     ["tech", "ai", "iphone", "google", "apple", "software", "hardware", "robot", "startup", "microsoft", "tesla", "spacex"],
-            "sports_news":   ["sport", "football", "basketball", "nba", "soccer", "tennis", "formula", "league", "match", "score", "ndeshja", "futboll"],
-            "sports_analysis": ["analizo", "taktika", "skema", "loja live", "boterori", "botërori", "world cup", "pse po humb", "pse po fiton", "topi", "fusha"],
+            "sports_news":   ["sport", "football", "basketball", "nba", "soccer", "tennis", "formula", "league", "match", "score"],
+            "sports_analysis": ["analyze", "tactics", "formation", "live game", "world cup", "why losing", "why winning", "ball", "pitch", "field"],
             "watch_war":     ["war", "conflict", "ukraine", "iran", "missile", "military", "attack", "nato", "russia", "israel", "gaza", "bomb"],
-            "watch_balkan_news": ["albania", "kosovo", "serbia", "balkan", "tirana", "pristina", "shqiperi", "kosova"],
-            "weather_query": ["weather", "rain", "temperature", "forecast", "sunny", "snow", "wind", "moti", "temp"],
+            "watch_balkan_news": ["albania", "kosovo", "serbia", "balkan", "tirana", "pristina"],
+            "weather_query": ["weather", "rain", "temperature", "forecast", "sunny", "snow", "wind", "temp"],
             "person_search": ["elon", "musk", "trump", "biden", "zuckerberg", "bezos", "president", "ceo"],
-            "watch_movie":   ["movie", "film", "shiko", "play", "tubi", "pluto", "cinema", "watch", "me gjej nje film"],
-            "greeting":      ["hello", "hi", "hey", "morning", "evening", "afternoon", "pershendetje", "tung"],
-            "goodbye":       ["bye", "goodbye", "farewell", "see you later", "naten", "mira u pafshim"],
+            "watch_movie":   ["movie", "film", "play", "tubi", "pluto", "cinema", "watch", "find me a movie"],
+            "greeting":      ["hello", "hi", "hey", "morning", "evening", "afternoon"],
+            "goodbye":       ["bye", "goodbye", "farewell", "see you later"],
         }
 
         self.intent_category_map = {
@@ -51,7 +51,7 @@ class Router:
         start_time = time.time()
         cleaned = self.clean_input(user_input)
 
-        if any(w in cleaned for w in ["play movie", "watch movie", "shiko filmin", "film", "movie", "tubi"]):
+        if any(w in cleaned for w in ["play movie", "watch movie", "film", "movie", "tubi"]):
             intent = "watch_movie"
             confidence = 1.0
 
@@ -61,12 +61,11 @@ class Router:
                 intent = music_intent
                 confidence = 1.0
 
-        # Kontroll i shpejtë për fjalët kyçe sportive për të rritur saktësinë e intent-it
-        if intent == "unknown" and any(w in cleaned for w in ["analizo", "loja live", "boterori", "botërori", "taktika", "ndeshja", "match", "futboll"]):
+        if intent == "unknown" and any(w in cleaned for w in ["analyze", "live game", "world cup", "tactics", "match", "football", "formation", "pitch"]):
             intent = "sports_analysis"
             confidence = 1.0
 
-        if intent == "unknown" and any(w in cleaned for w in ["weather", "temperature", "forecast", "moti"]):
+        if intent == "unknown" and any(w in cleaned for w in ["weather", "temperature", "forecast"]):
             intent = "weather_query"
             confidence = 1.0
 
@@ -76,11 +75,11 @@ class Router:
                 intent = keyword_intent
                 confidence = 0.9
 
-        if intent == "unknown" and any(w in cleaned for w in ["hello", "hi", "hey", "pershendetje"]):
+        if intent == "unknown" and any(w in cleaned for w in ["hello", "hi", "hey"]):
             intent = "greeting"
             confidence = 1.0
 
-        logger.info(f"[ROUTER] Final Intent: {intent} ({confidence})")
+        logger.info(f"[ROUTER] Final Routed Intent: {intent} ({confidence})")
 
         try:
             if intent in self.MUSIC_INTENTS:
@@ -99,7 +98,6 @@ class Router:
                 result = self.weather_engine.process(cleaned)
                 route_name = "weather"
 
-            # KORRIGJIMI: Si sports_analysis ashtu edhe sports_news dërgohen te Sports Engine
             elif intent == "sports_analysis" or intent == "sports_news":
                 result = self.sports_engine.process(cleaned)
                 route_name = "sports_live"
@@ -122,9 +120,14 @@ class Router:
                 route_name = "web"
 
         except Exception as e:
-            logger.error(f"Error in routing: {e}")
+            logger.error(f"Critical exception captured inside routing pipeline: {e}")
             result = self.static_response("I'm having trouble connecting to my brain right now. Check your Wi-Fi!")
             route_name = "error"
+
+        if not isinstance(result, dict):
+            result = {"type": "fallback", "data": {"text": str(result)}}
+        elif "type" not in result:
+            result["type"] = "fallback"
 
         latency = round(time.time() - start_time, 4)
         self.debug_pipeline(user_input, cleaned, intent, confidence, route_name, latency)
@@ -133,7 +136,7 @@ class Router:
 
     def detect_music(self, text):
         if "focus" in text or "studying" in text or "coding" in text: return "music_focus"
-        if "sad" in text or "merzi" in text or "cry" in text: return "music_sad"
+        if "sad" in text or "cry" in text: return "music_sad"
         if "happ" in text or "party" in text or "dance" in text: return "music_happy"
         return None
 
@@ -175,9 +178,13 @@ class Router:
             for topic, kws in keywords_map.items():
                 if any(kw in text for kw in kws):
                     for ch in CHANNELS:
-                        if topic in ch.name.lower():
-                            return {"type": "channel", "data": {"channel": ch.name, "url": ch.url}}
-        except ImportError:
+                        ch_name = ch.get("name", "") if isinstance(ch, dict) else getattr(ch, "name", "")
+                        ch_url = ch.get("url", "") if isinstance(ch, dict) else getattr(ch, "url", "")
+                        
+                        if topic in ch_name.lower():
+                            return {"type": "channel", "data": {"channel": ch_name, "url": ch_url}}
+        except Exception as e:
+            logger.warning(f"Bypassed core.channel_registry error sequence: {e}")
             return None
         return None
 
