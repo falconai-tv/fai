@@ -3,8 +3,9 @@ import pickle
 import numpy as np
 from typing import Dict
 
-MODEL_PATH = os.path.join("ml", "model.pkl")
-VECTORIZER_PATH = os.path.join("ml", "vectorizer.pkl")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
+VECTORIZER_PATH = os.path.join(BASE_DIR, "vectorizer.pkl")
 
 class FalconPredictor:
     def __init__(self):
