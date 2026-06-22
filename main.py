@@ -8,7 +8,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from core.brain import FalconBrain
-from core.router import Router
+from core.router import router
 from engines.web_engine import WebEngine
 from engines.music_engine import MusicEngine
 from engines.weather_engine import WeatherEngine
