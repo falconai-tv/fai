@@ -1,141 +1,272 @@
-import os
+import logging
+import time
+import re
 
-API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "a7c14800dca2d9cb520ebde622ad0236")
+logger = logging.getLogger("FalconAI.Router")
 
-OPENWEATHER_KEY = os.getenv("OPENWEATHER_KEY", "f8a26ced25d514b94ad2d1e61bca80e1")
+class Router:
+    def __init__(self, music_engine, web_engine, weather_engine, sports_engine):
+        self.music_engine   = music_engine
+        self.web_engine     = web_engine
+        self.weather_engine = weather_engine
+        self.sports_engine  = sports_engine
 
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "53c1d74812msh8abfdd1e3b43de7p1002b4jsn9c3a24d3ec58")
+        self.keyword_map = {
+            "music_sad": [
+                "sad", "depressed", "lonely", "heartbreak", "cry", "grief",
+                "miserable", "down", "upset", "broken", "hurt", "pain", "crying"
+            ],
+            "music_happy": [
+                "happy", "excited", "party", "celebrate", "great", "amazing",
+                "fantastic", "dance", "joy", "fun", "pumped", "energetic"
+            ],
+            "music_focus": [
+                "focus", "study", "concentrate", "work", "coding", "productive",
+                "lofi", "ambient", "homework", "reading", "focused"
+            ],
+            "business_news": [
+                "stock", "market", "bitcoin", "crypto", "economy", "shares",
+                "trading", "finance", "inflation", "gold price"
+            ],
+            "tech_news": [
+                "tech", "ai", "iphone", "google", "apple", "software", "hardware",
+                "robot", "startup", "microsoft", "tesla", "spacex"
+            ],
+            "sports_news": [
+                "sport", "football", "basketball", "nba", "soccer", "tennis",
+                "formula", "formula 1", "f1", "league", "match", "score", "goal",
+                "premier league", "la liga", "serie a", "bundesliga", "champions league",
+                "europa league", "world cup", "mls", "nfl", "mlb", "nhl", "ufc",
+                "boxing", "transfer", "fixture", "standings", "table", "result",
+                "highlights", "liverpool", "arsenal", "real madrid", "barcelona",
+                "manchester", "chelsea", "tottenham", "psg", "juventus", "inter milan",
+                "ac milan", "atletico madrid", "dortmund", "porto", "benfica",
+                "rangers", "celtic", "ajax", "player", "coach", "manager",
+                "referee", "stadium", "fans", "cup", "trophy", "title", "season",
+                "gameweek", "matchday", "derby", "rivalry", "hat trick", "brace"
+            ],
+            "sports_analysis": [
+                "analyze", "tactics", "formation", "live game", "world cup",
+                "why losing", "why winning", "ball", "pitch", "field", "lineup",
+                "starting eleven", "starting 11", "who scored", "halftime",
+                "half time", "full time", "fulltime", "penalty", "penalties",
+                "red card", "yellow card", "offside", "assist", "clean sheet",
+                "pressing", "possession", "counterattack", "set piece", "corner",
+                "free kick", "header", "dribble", "pass", "cross", "shot on target",
+                "xg", "expected goals", "heat map", "player rating", "man of the match",
+                "substitution", "injury time", "extra time", "golden goal",
+                "4-3-3", "4-4-2", "3-5-2", "4-2-3-1", "5-3-2"
+            ],
+            "watch_war": [
+                "war", "conflict", "ukraine", "iran", "missile", "military",
+                "attack", "nato", "russia", "israel", "gaza", "bomb"
+            ],
+            "watch_balkan_news": [
+                "albania", "kosovo", "serbia", "balkan", "tirana", "pristina"
+            ],
+            "weather_query": [
+                "weather", "rain", "temperature", "forecast", "sunny",
+                "snow", "wind", "temp"
+            ],
+            "person_search": [
+                "elon", "musk", "trump", "biden", "zuckerberg", "bezos",
+                "president", "ceo"
+            ],
+            "watch_movie": [
+                "movie", "film", "play", "tubi", "pluto", "cinema",
+                "watch", "find me a movie"
+            ],
+            "greeting": [
+                "hello", "hi", "hey", "morning", "evening", "afternoon"
+            ],
+            "goodbye": [
+                "bye", "goodbye", "farewell", "see you later"
+            ],
+        }
 
-PORT  = int(os.getenv("PORT", 8080))
-DEBUG = os.getenv("DEBUG", "false").lower() == "true"
-HOST  = "0.0.0.0"
+        self.intent_category_map = {
+            "watch_news":       "world",
+            "watch_war":        "war",
+            "watch_balkan_news":"balkan",
+            "tech_news":        "technology",
+            "sports_news":      "sports",
+            "sports_analysis":  "sports",
+            "business_news":    "business",
+            "weather_query":    "general",
+            "watch_movie":      "vod"
+        }
 
-API_FOOTBALL_URL = "https://v3.football.api-sports.io"
+        self.MUSIC_INTENTS  = {"music_sad", "music_happy", "music_focus"}
+        self.STATIC_INTENTS = {"greeting", "goodbye"}
+        self.STATIC_RESPONSES = {
+            "greeting": "Hello! I'm FalconAI. How can I help you discover something today?",
+            "goodbye":  "Goodbye! I'll be here whenever you need more music or movies."
+        }
 
-SPORTS_API_TIMEOUT = 6
+    def route(self, user_input, intent="unknown", confidence=0.0):
+        start_time = time.time()
+        cleaned = self.clean_input(user_input)
 
-SUPPORTED_LEAGUES = {
-    "premier_league":   39,
-    "la_liga":          140,
-    "serie_a":          135,
-    "bundesliga":       78,
-    "ligue_1":          61,
-    "champions_league": 2,
-    "europa_league":    3,
-    "world_cup":        1,
-}
+        if any(w in cleaned for w in ["play movie", "watch movie", "film", "movie", "tubi"]):
+            intent = "watch_movie"
+            confidence = 1.0
 
-DEFAULT_FORMATION = "4-3-3"
+        else:
+            music_intent = self.detect_music(cleaned)
+            if music_intent:
+                intent = music_intent
+                confidence = 1.0
 
-FORMATIONS = {
-    "4-3-3": {
-        "home": [
-            {"role": "GK",  "x": 0.05, "y": 0.50},
-            {"role": "RB",  "x": 0.20, "y": 0.15},
-            {"role": "CB",  "x": 0.20, "y": 0.35},
-            {"role": "CB",  "x": 0.20, "y": 0.65},
-            {"role": "LB",  "x": 0.20, "y": 0.85},
-            {"role": "CM",  "x": 0.45, "y": 0.25},
-            {"role": "CDM", "x": 0.40, "y": 0.50},
-            {"role": "CM",  "x": 0.45, "y": 0.75},
-            {"role": "RW",  "x": 0.70, "y": 0.15},
-            {"role": "ST",  "x": 0.78, "y": 0.50},
-            {"role": "LW",  "x": 0.70, "y": 0.85},
-        ],
-        "away": [
-            {"role": "GK",  "x": 0.95, "y": 0.50},
-            {"role": "RB",  "x": 0.80, "y": 0.85},
-            {"role": "CB",  "x": 0.80, "y": 0.65},
-            {"role": "CB",  "x": 0.80, "y": 0.35},
-            {"role": "LB",  "x": 0.80, "y": 0.15},
-            {"role": "CM",  "x": 0.55, "y": 0.75},
-            {"role": "CDM", "x": 0.60, "y": 0.50},
-            {"role": "CM",  "x": 0.55, "y": 0.25},
-            {"role": "RW",  "x": 0.30, "y": 0.85},
-            {"role": "ST",  "x": 0.22, "y": 0.50},
-            {"role": "LW",  "x": 0.30, "y": 0.15},
-        ]
-    },
-    "4-4-2": {
-        "home": [
-            {"role": "GK",  "x": 0.05, "y": 0.50},
-            {"role": "RB",  "x": 0.20, "y": 0.15},
-            {"role": "CB",  "x": 0.20, "y": 0.35},
-            {"role": "CB",  "x": 0.20, "y": 0.65},
-            {"role": "LB",  "x": 0.20, "y": 0.85},
-            {"role": "RM",  "x": 0.50, "y": 0.15},
-            {"role": "CM",  "x": 0.45, "y": 0.38},
-            {"role": "CM",  "x": 0.45, "y": 0.62},
-            {"role": "LM",  "x": 0.50, "y": 0.85},
-            {"role": "ST",  "x": 0.75, "y": 0.38},
-            {"role": "ST",  "x": 0.75, "y": 0.62},
-        ],
-        "away": [
-            {"role": "GK",  "x": 0.95, "y": 0.50},
-            {"role": "RB",  "x": 0.80, "y": 0.85},
-            {"role": "CB",  "x": 0.80, "y": 0.65},
-            {"role": "CB",  "x": 0.80, "y": 0.35},
-            {"role": "LB",  "x": 0.80, "y": 0.15},
-            {"role": "RM",  "x": 0.50, "y": 0.85},
-            {"role": "CM",  "x": 0.55, "y": 0.62},
-            {"role": "CM",  "x": 0.55, "y": 0.38},
-            {"role": "LM",  "x": 0.50, "y": 0.15},
-            {"role": "ST",  "x": 0.25, "y": 0.62},
-            {"role": "ST",  "x": 0.25, "y": 0.38},
-        ]
-    },
-    "3-5-2": {
-        "home": [
-            {"role": "GK",  "x": 0.05, "y": 0.50},
-            {"role": "CB",  "x": 0.20, "y": 0.25},
-            {"role": "CB",  "x": 0.20, "y": 0.50},
-            {"role": "CB",  "x": 0.20, "y": 0.75},
-            {"role": "RWB", "x": 0.45, "y": 0.10},
-            {"role": "CM",  "x": 0.45, "y": 0.32},
-            {"role": "CDM", "x": 0.40, "y": 0.50},
-            {"role": "CM",  "x": 0.45, "y": 0.68},
-            {"role": "LWB", "x": 0.45, "y": 0.90},
-            {"role": "ST",  "x": 0.75, "y": 0.38},
-            {"role": "ST",  "x": 0.75, "y": 0.62},
-        ],
-        "away": [
-            {"role": "GK",  "x": 0.95, "y": 0.50},
-            {"role": "CB",  "x": 0.80, "y": 0.75},
-            {"role": "CB",  "x": 0.80, "y": 0.50},
-            {"role": "CB",  "x": 0.80, "y": 0.25},
-            {"role": "RWB", "x": 0.55, "y": 0.90},
-            {"role": "CM",  "x": 0.55, "y": 0.68},
-            {"role": "CDM", "x": 0.60, "y": 0.50},
-            {"role": "CM",  "x": 0.55, "y": 0.32},
-            {"role": "LWB", "x": 0.55, "y": 0.10},
-            {"role": "ST",  "x": 0.25, "y": 0.62},
-            {"role": "ST",  "x": 0.25, "y": 0.38},
-        ]
-    }
-}
+        if intent == "unknown" and any(w in cleaned for w in [
+            "analyze", "live game", "world cup", "tactics", "match",
+            "football", "formation", "pitch", "lineup", "starting eleven",
+            "halftime", "full time", "red card", "yellow card", "penalty"
+        ]):
+            intent = "sports_analysis"
+            confidence = 1.0
 
-WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5/weather"
-WEATHER_TIMEOUT  = 5
-WEATHER_UNITS    = "metric"
-WEATHER_LANG     = "en"
-WEATHER_FALLBACK_CITY = "New York"
+        if intent == "unknown" and any(w in cleaned for w in [
+            "premier league", "la liga", "serie a", "bundesliga",
+            "champions league", "europa league", "nba", "nfl", "ufc",
+            "transfer", "standings", "fixture", "score", "goal", "highlights"
+        ]):
+            intent = "sports_news"
+            confidence = 1.0
 
-MUSIC_MAX_HISTORY = 50
-MUSIC_SEARCH_OFFSET_MAX = 8
+        if intent == "unknown" and any(w in cleaned for w in [
+            "weather", "temperature", "forecast", "rain", "snow"
+        ]):
+            intent = "weather_query"
+            confidence = 1.0
 
-WEB_TIMEOUT         = 5
-ARTICLE_MAX_LENGTH  = 1500
-NEWS_ARTICLES_COUNT = 3
+        if intent == "unknown" or confidence < 0.7:
+            keyword_intent = self.keyword_fallback(cleaned)
+            if keyword_intent:
+                intent = keyword_intent
+                confidence = 0.9
 
-ML_CONFIDENCE_THRESHOLD = 0.7
-DEFAULT_USER_ID         = "default_user"
+        if intent == "unknown" and any(w in cleaned for w in ["hello", "hi", "hey"]):
+            intent = "greeting"
+            confidence = 1.0
 
-BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR        = os.path.join(BASE_DIR, "data")
-VOICE_CACHE_DIR = os.path.join(DATA_DIR, "voice_cache")
-LOGS_FILE       = os.path.join(DATA_DIR, "logs.jsonl")
-USER_MEMORY     = os.path.join(DATA_DIR, "user_memory.json")
-CHANNELS_FILE   = os.path.join(DATA_DIR, "channels.json")
+        logger.info(f"[ROUTER] Final Routed Intent: {intent} ({confidence})")
 
-VOICE_CACHE_ENABLED = True
-VOICE_LANG          = "en"
+        try:
+            if intent in self.MUSIC_INTENTS:
+                result     = self.music_engine.process(cleaned)
+                route_name = "music"
+
+            elif intent in self.STATIC_INTENTS:
+                result     = self.static_response(self.STATIC_RESPONSES.get(intent, "I'm here to help!"))
+                route_name = "text"
+
+            elif intent == "watch_movie":
+                result     = self.web_engine.process(cleaned, intent="watch_movie")
+                route_name = "web_movie"
+
+            elif intent == "weather_query":
+                result     = self.weather_engine.process(cleaned)
+                route_name = "weather"
+
+            elif intent in ("sports_analysis", "sports_news"):
+                result     = self.sports_engine.process(cleaned, intent=intent)
+                route_name = "sports"
+
+            elif intent == "watch_news":
+                channel_result = self.try_channel_match(cleaned)
+                if channel_result:
+                    result     = channel_result
+                    route_name = "channel"
+                else:
+                    result     = self.web_engine.process(cleaned, intent="watch_news")
+                    route_name = "web"
+
+            elif "i am" in cleaned or "feel" in cleaned:
+                result     = self.static_response("I'm built to keep you focused. Would you like some lofi music?")
+                route_name = "text"
+
+            else:
+                result     = self.web_engine.process(cleaned, intent="watch_news")
+                route_name = "web"
+
+        except Exception as e:
+            logger.error(f"Critical exception captured inside routing pipeline: {e}")
+            result     = self.static_response("I'm having trouble connecting right now. Check your Wi-Fi!")
+            route_name = "error"
+
+        if not isinstance(result, dict):
+            result = {"type": "fallback", "data": {"text": str(result)}}
+        elif "type" not in result:
+            result["type"] = "fallback"
+
+        latency = round(time.time() - start_time, 4)
+        self.debug_pipeline(user_input, cleaned, intent, confidence, route_name, latency)
+
+        return result
+
+    def detect_music(self, text):
+        if any(w in text for w in ["focus", "studying", "coding", "concentrate", "work"]):
+            return "music_focus"
+        if any(w in text for w in ["sad", "cry", "depressed", "lonely", "heartbreak"]):
+            return "music_sad"
+        if any(w in text for w in ["happy", "party", "dance", "celebrate", "excited"]):
+            return "music_happy"
+        return None
+
+    def keyword_fallback(self, text):
+        best_intent = None
+        best_score  = 0
+        for intent, keywords in self.keyword_map.items():
+            score = sum(1 for kw in keywords if kw in text)
+            if score > best_score:
+                best_score  = score
+                best_intent = intent
+        return best_intent if best_score > 0 else None
+
+    def clean_input(self, text):
+        text = text.lower().strip()
+        replacements = {
+            "im ":      "i am ",
+            "i'm ":     "i am ",
+            "whats":    "what is",
+            "wanna":    "want to",
+            "focused":  "focus",
+            "pl":       "premier league",
+            "ucl":      "champions league",
+            "el":       "europa league",
+        }
+        for k, v in replacements.items():
+            text = text.replace(k, v)
+        return text
+
+    def static_response(self, text):
+        return {"type": "text", "data": {"text": text}}
+
+    def try_channel_match(self, text):
+        try:
+            from core.channel_registry import CHANNELS
+            keywords_map = {
+                "iran":     ["iran", "middle east"],
+                "germany":  ["germany", "berlin"],
+                "ukraine":  ["ukraine", "russia"],
+                "sports":   ["football", "soccer", "nba"]
+            }
+            for topic, kws in keywords_map.items():
+                if any(kw in text for kw in kws):
+                    for ch in CHANNELS:
+                        ch_name = ch.get("name", "") if isinstance(ch, dict) else getattr(ch, "name", "")
+                        ch_url  = ch.get("url",  "") if isinstance(ch, dict) else getattr(ch, "url",  "")
+                        if topic in ch_name.lower():
+                            return {"type": "channel", "data": {"channel": ch_name, "url": ch_url}}
+        except Exception as e:
+            logger.warning(f"Bypassed core.channel_registry error sequence: {e}")
+            return None
+        return None
+
+    def debug_pipeline(self, original, cleaned, intent, confidence, route, latency):
+        print(f"\n--- FALCONAI DEBUG ---")
+        print(f"Input:      {original}")
+        print(f"Clean:      {cleaned}")
+        print(f"Intent:     {intent} ({confidence})")
+        print(f"Route:      {route} | Latency: {latency}s")
+        print(f"----------------------\n")
