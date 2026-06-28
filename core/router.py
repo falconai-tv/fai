@@ -33,7 +33,7 @@ class Router:
                 "robot", "startup", "microsoft", "tesla", "spacex"
             ],
             "sports_news": [
-                "sport", "football", "basketball", "nba", "soccer", "tennis",
+                "sport", "sports", "football", "basketball", "nba", "soccer", "tennis",
                 "formula", "formula 1", "f1", "league", "match", "score", "goal",
                 "premier league", "la liga", "serie a", "bundesliga", "champions league",
                 "europa league", "world cup", "mls", "nfl", "mlb", "nhl", "ufc",
@@ -43,7 +43,10 @@ class Router:
                 "ac milan", "atletico madrid", "dortmund", "porto", "benfica",
                 "rangers", "celtic", "ajax", "player", "coach", "manager",
                 "referee", "stadium", "fans", "cup", "trophy", "title", "season",
-                "gameweek", "matchday", "derby", "rivalry", "hat trick", "brace"
+                "gameweek", "matchday", "derby", "rivalry", "hat trick", "brace",
+                "live sport", "live sports", "live score", "live match",
+                "live football", "live soccer", "live basketball", "live tennis",
+                "live f1", "live nba", "live game", "live result"
             ],
             "sports_analysis": [
                 "analyze", "tactics", "formation", "live game", "world cup",
@@ -120,7 +123,20 @@ class Router:
         if intent == "unknown" and any(w in cleaned for w in [
             "analyze", "live game", "world cup", "tactics", "match",
             "football", "formation", "pitch", "lineup", "starting eleven",
-            "halftime", "full time", "red card", "yellow card", "penalty"
+            "halftime", "half time", "full time", "red card", "yellow card", "penalty",
+            "sport", "sports", "live sport", "live sports",
+            "live score", "live match", "live football", "live soccer",
+            "live basketball", "live tennis", "live f1", "live nba",
+            "soccer", "basketball", "tennis", "nba", "nfl", "ufc",
+            "score", "goal", "result", "fixture", "standings",
+            "real madrid", "barcelona", "liverpool", "arsenal", "chelsea",
+            "manchester", "juventus", "psg", "dortmund", "atletico",
+            "albania", "kosovo", "serbia", "portugal", "brazil", "argentina",
+            "premier league", "la liga", "serie a", "bundesliga", "champions league",
+            "europa league", "mls", "mlb", "nhl", "boxing", "transfer",
+            "highlights", "player", "coach", "referee", "stadium",
+            "hat trick", "derby", "penalty", "offside", "assist",
+            "possession", "corner", "free kick", "header", "shot on target"
         ]):
             intent = "sports_analysis"
             confidence = 1.0
