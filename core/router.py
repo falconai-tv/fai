@@ -131,11 +131,11 @@ class Router:
             "score", "goal", "result", "fixture", "standings",
             "real madrid", "barcelona", "liverpool", "arsenal", "chelsea",
             "manchester", "juventus", "psg", "dortmund", "atletico",
-            "albania", "kosovo", "serbia", "portugal", "brazil", "argentina",
+            "albania", "kosovo", "portugal", "brazil", "argentina",
             "premier league", "la liga", "serie a", "bundesliga", "champions league",
             "europa league", "mls", "mlb", "nhl", "boxing", "transfer",
             "highlights", "player", "coach", "referee", "stadium",
-            "hat trick", "derby", "penalty", "offside", "assist",
+            "hat trick", "derby", "offside", "assist",
             "possession", "corner", "free kick", "header", "shot on target"
         ]):
             intent = "sports_analysis"
@@ -185,7 +185,7 @@ class Router:
                 route_name = "weather"
 
             elif intent in ("sports_analysis", "sports_news"):
-                result     = self.sports_engine.process(cleaned, intent=intent)
+                result     = self.sports_engine.process(cleaned)
                 route_name = "sports"
 
             elif intent == "watch_news":
