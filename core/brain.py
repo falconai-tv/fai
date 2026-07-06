@@ -26,7 +26,7 @@ class FalconBrain:
         cleaned_text = text.lower().strip()
         logger.info(f"[BRAIN] Processing input token: '{cleaned_text}' for identity node: {user_id}")
 
-        sports_keywords = ["analyze", "live game", "world cup", "tactics", "match", "football", "formation", "pitch"]
+        sports_keywords = ["analyze", "live game", "world cup", "tactics", "match", "football","formation", "pitch", "sport", "sports", "live sport", "live sports", "live score", "live match", "live football", "live soccer", "soccer", "basketball", "tennis", "nba", "nfl", "ufc", "score", "goal", "result", "fixture", "standings", "real madrid", "barcelona", "liverpool", "arsenal", "chelsea", "premier league", "la liga", "champions league", "serie a", "bundesliga", "transfer", "halftime", "half time", "full time", "red card", "yellow card", "penalty", "offside", "corner", "free kick"]
         if any(w in cleaned_text for w in sports_keywords):
             logger.info("[BRAIN] Intent match intercepted: Directing pipeline to Sports Analysis.")
             if router:
