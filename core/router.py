@@ -11,94 +11,6 @@ class Router:
         self.weather_engine = weather_engine
         self.sports_engine  = sports_engine
 
-        self.keyword_map = {
-            "music_sad": [
-                "sad", "depressed", "lonely", "heartbreak", "cry", "grief",
-                "miserable", "down", "upset", "broken", "hurt", "pain", "crying"
-            ],
-            "music_happy": [
-                "happy", "excited", "party", "celebrate", "great", "amazing",
-                "fantastic", "dance", "joy", "fun", "pumped", "energetic"
-            ],
-            "music_focus": [
-                "focus", "study", "concentrate", "work", "coding", "productive",
-                "lofi", "ambient", "homework", "reading", "focused"
-            ],
-            "business_news": [
-                "stock", "market", "bitcoin", "crypto", "economy", "shares",
-                "trading", "finance", "inflation", "gold price"
-            ],
-            "tech_news": [
-                "tech", "ai", "iphone", "google", "apple", "software", "hardware",
-                "robot", "startup", "microsoft", "tesla", "spacex"
-            ],
-            "sports_news": [
-                "sport", "sports", "football", "basketball", "nba", "soccer", "tennis",
-                "formula", "formula 1", "f1", "league", "match", "score", "goal",
-                "premier league", "la liga", "serie a", "bundesliga", "champions league",
-                "europa league", "world cup", "mls", "nfl", "mlb", "nhl", "ufc",
-                "boxing", "transfer", "fixture", "standings", "table", "result",
-                "highlights", "liverpool", "arsenal", "real madrid", "barcelona",
-                "manchester", "chelsea", "tottenham", "psg", "juventus", "inter milan",
-                "ac milan", "atletico madrid", "dortmund", "porto", "benfica",
-                "rangers", "celtic", "ajax", "player", "coach", "manager",
-                "referee", "stadium", "fans", "cup", "trophy", "title", "season",
-                "gameweek", "matchday", "derby", "rivalry", "hat trick", "brace",
-                "live sport", "live sports", "live score", "live match",
-                "live football", "live soccer", "live basketball", "live tennis",
-                "live f1", "live nba", "live game", "live result"
-            ],
-            "sports_analysis": [
-                "analyze", "tactics", "formation", "live game", "world cup",
-                "why losing", "why winning", "ball", "pitch", "field", "lineup",
-                "starting eleven", "starting 11", "who scored", "halftime",
-                "half time", "full time", "fulltime", "penalty", "penalties",
-                "red card", "yellow card", "offside", "assist", "clean sheet",
-                "pressing", "possession", "counterattack", "set piece", "corner",
-                "free kick", "header", "dribble", "pass", "cross", "shot on target",
-                "xg", "expected goals", "heat map", "player rating", "man of the match",
-                "substitution", "injury time", "extra time", "golden goal",
-                "4-3-3", "4-4-2", "3-5-2", "4-2-3-1", "5-3-2"
-            ],
-            "watch_war": [
-                "war", "conflict", "ukraine", "iran", "missile", "military",
-                "attack", "nato", "russia", "israel", "gaza", "bomb"
-            ],
-            "watch_balkan_news": [
-                "albania", "kosovo", "serbia", "balkan", "tirana", "pristina"
-            ],
-            "weather_query": [
-                "weather", "rain", "temperature", "forecast", "sunny",
-                "snow", "wind", "temp"
-            ],
-            "person_search": [
-                "elon", "musk", "trump", "biden", "zuckerberg", "bezos",
-                "president", "ceo"
-            ],
-            "watch_movie": [
-                "movie", "film", "tubi", "pluto", "cinema",
-                "watch", "find me a movie"
-            ],
-            "greeting": [
-                "hello", "hi", "hey", "morning", "evening", "afternoon"
-            ],
-            "goodbye": [
-                "bye", "goodbye", "farewell", "see you later"
-            ],
-        }
-
-        self.intent_category_map = {
-            "watch_news":       "world",
-            "watch_war":        "war",
-            "watch_balkan_news":"balkan",
-            "tech_news":        "technology",
-            "sports_news":      "sports",
-            "sports_analysis":  "sports",
-            "business_news":    "business",
-            "weather_query":    "general",
-            "watch_movie":      "vod"
-        }
-
         self.MUSIC_INTENTS  = {"music_sad", "music_happy", "music_focus"}
         self.STATIC_INTENTS = {"greeting", "goodbye"}
         self.STATIC_RESPONSES = {
@@ -110,108 +22,49 @@ class Router:
         start_time = time.time()
         cleaned = self.clean_input(user_input)
 
-        if cleaned.startswith("play ") or "song" in cleaned or "music" in cleaned:
-            intent = "music_happy"
-            confidence = 1.0
-
-        elif any(w in cleaned for w in ["play movie", "watch movie", "film", "movie", "tubi"]):
+        # 1. Kontrollo për filma
+        if any(w in cleaned for w in ["play movie", "watch movie", "film", "movie", "tubi"]):
             intent = "watch_movie"
             confidence = 1.0
 
-        else:
-            music_intent = self.detect_music(cleaned)
-            if music_intent:
-                intent = music_intent
-                confidence = 1.0
-
-        if intent == "unknown" and any(w in cleaned for w in [
-            "analyze", "live game", "world cup", "tactics", "match",
-            "football", "formation", "pitch", "lineup", "starting eleven",
-            "halftime", "half time", "full time", "red card", "yellow card", "penalty",
-            "sport", "sports", "live sport", "live sports",
-            "live score", "live match", "live football", "live soccer",
-            "live basketball", "live tennis", "live f1", "live nba",
-            "soccer", "basketball", "tennis", "nba", "nfl", "ufc",
-            "score", "goal", "result", "fixture", "standings",
-            "real madrid", "barcelona", "liverpool", "arsenal", "chelsea",
-            "manchester", "juventus", "psg", "dortmund", "atletico",
-            "albania", "kosovo", "portugal", "brazil", "argentina",
-            "premier league", "la liga", "serie a", "bundesliga", "champions league",
-            "europa league", "mls", "mlb", "nhl", "boxing", "transfer",
-            "highlights", "player", "coach", "referee", "stadium",
-            "hat trick", "derby", "offside", "assist",
-            "possession", "corner", "free kick", "header", "shot on target"
+        # 2. Kontrollo për sporte
+        elif any(w in cleaned for w in [
+            "match", "score", "goal", "premier league", "champions league", 
+            "nba", "football", "soccer", "live score", "world cup", "real madrid", "barcelona"
         ]):
             intent = "sports_analysis"
             confidence = 1.0
 
-        if intent == "unknown" and any(w in cleaned for w in [
-            "premier league", "la liga", "serie a", "bundesliga",
-            "champions league", "europa league", "nba", "nfl", "ufc",
-            "transfer", "standings", "fixture", "score", "goal", "highlights"
-        ]):
-            intent = "sports_news"
-            confidence = 1.0
-
-        if intent == "unknown" and any(w in cleaned for w in [
-            "weather", "temperature", "forecast", "rain", "snow"
-        ]):
+        # 3. Kontrollo për motin
+        elif any(w in cleaned for w in ["weather", "temperature", "forecast", "rain", "snow"]):
             intent = "weather_query"
             confidence = 1.0
 
-        if intent == "unknown" or confidence < 0.7:
-            keyword_intent = self.keyword_fallback(cleaned)
-            if keyword_intent:
-                intent = keyword_intent
-                confidence = 0.9
-
-        if intent == "unknown" and any(w in cleaned for w in ["hello", "hi", "hey"]):
-            intent = "greeting"
+        # 4. Çdo gjë tjetër (emra këngëtarësh, zhanre, emocione, ose kërkesa të lira) trajtohet si MUZIKË!
+        else:
+            intent = "music_happy"
             confidence = 1.0
 
-        logger.info(f"[ROUTER] Final Routed Intent: {intent} ({confidence})")
-
         try:
-            if intent in self.MUSIC_INTENTS:
-                result     = self.music_engine.process(cleaned)
+            if intent in self.MUSIC_INTENTS or intent == "music_happy":
+                result = self.music_engine.process(user_input)
                 route_name = "music"
-
-            elif intent in self.STATIC_INTENTS:
-                result     = self.static_response(self.STATIC_RESPONSES.get(intent, "I'm here to help!"))
-                route_name = "text"
-
             elif intent == "watch_movie":
-                result     = self.web_engine.process(cleaned, intent="watch_movie")
+                result = self.web_engine.process(cleaned, intent="watch_movie")
                 route_name = "web_movie"
-
             elif intent == "weather_query":
-                result     = self.weather_engine.process(cleaned)
+                result = self.weather_engine.process(cleaned)
                 route_name = "weather"
-
             elif intent in ("sports_analysis", "sports_news"):
-                result     = self.sports_engine.process(cleaned)
+                result = self.sports_engine.process(cleaned)
                 route_name = "sports"
-
-            elif intent == "watch_news":
-                channel_result = self.try_channel_match(cleaned)
-                if channel_result:
-                    result     = channel_result
-                    route_name = "channel"
-                else:
-                    result     = self.web_engine.process(cleaned, intent="watch_news")
-                    route_name = "web"
-
-            elif "i am" in cleaned or "feel" in cleaned:
-                result     = self.static_response("I'm built to keep you focused. Would you like some lofi music?")
-                route_name = "text"
-
             else:
-                result     = self.web_engine.process(cleaned, intent="watch_news")
-                route_name = "web"
+                result = self.music_engine.process(user_input)
+                route_name = "music"
 
         except Exception as e:
             logger.error(f"Critical exception captured inside routing pipeline: {e}")
-            result     = self.static_response("I'm having trouble connecting right now. Check your Wi-Fi!")
+            result = self.static_response("I'm having trouble connecting right now. Check your Wi-Fi!")
             route_name = "error"
 
         if not isinstance(result, dict):
@@ -223,25 +76,6 @@ class Router:
         self.debug_pipeline(user_input, cleaned, intent, confidence, route_name, latency)
 
         return result
-
-    def detect_music(self, text):
-        if any(w in text for w in ["focus", "studying", "coding", "concentrate", "work"]):
-            return "music_focus"
-        if any(w in text for w in ["sad", "cry", "depressed", "lonely", "heartbreak"]):
-            return "music_sad"
-        if any(w in text for w in ["happy", "party", "dance", "celebrate", "excited"]):
-            return "music_happy"
-        return None
-
-    def keyword_fallback(self, text):
-        best_intent = None
-        best_score  = 0
-        for intent, keywords in self.keyword_map.items():
-            score = sum(1 for kw in keywords if kw in text)
-            if score > best_score:
-                best_score  = score
-                best_intent = intent
-        return best_intent if best_score > 0 else None
 
     def clean_input(self, text):
         text = text.lower().strip()
@@ -261,27 +95,6 @@ class Router:
 
     def static_response(self, text):
         return {"type": "text", "data": {"text": text}}
-
-    def try_channel_match(self, text):
-        try:
-            from core.channel_registry import CHANNELS
-            keywords_map = {
-                "iran":     ["iran", "middle east"],
-                "germany":  ["germany", "berlin"],
-                "ukraine":  ["ukraine", "russia"],
-                "sports":   ["football", "soccer", "nba"]
-            }
-            for topic, kws in keywords_map.items():
-                if any(kw in text for kw in kws):
-                    for ch in CHANNELS:
-                        ch_name = ch.get("name", "") if isinstance(ch, dict) else getattr(ch, "name", "")
-                        ch_url  = ch.get("url",  "") if isinstance(ch, dict) else getattr(ch, "url",  "")
-                        if topic in ch_name.lower():
-                            return {"type": "channel", "data": {"channel": ch_name, "url": ch_url}}
-        except Exception as e:
-            logger.warning(f"Bypassed core.channel_registry error sequence: {e}")
-            return None
-        return None
 
     def debug_pipeline(self, original, cleaned, intent, confidence, route, latency):
         print(f"\n--- FALCONAI DEBUG ---")
