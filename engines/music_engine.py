@@ -1,91 +1,38 @@
 import logging
 import random
-import threading
 from ytmusicapi import YTMusic
 
 logger = logging.getLogger("FalconAI.MusicEngine")
 
-MOOD_QUERIES = {
-    "ecstatic": ["The Weeknd upbeat", "Travis Scott hype", "Dua Lipa dance hits"],
-    "happy": ["Bad Bunny summer hits", "Bruno Mars happy", "Pop radio hits 2026"],
-    "romantic": ["Ed Sheeran romantic", "Drake R&B love", "Taylor Swift love songs"],
-    "motivated": ["Eminem workout", "Gym motivational hits", "Kanye West hype"],
-    "calm": ["Lofi Girl study beats", "Coldplay acoustic", "Chill ambient piano"],
-    "nostalgic": ["90s hip hop classics", "2000s pop hits", "Retro throwback classics"],
-    "focused": ["Deep focus lofi", "Coding instrumental beats", "Hans Zimmer score"],
-    "anxious": ["Calming piano instrumental", "Meditation ambient soundscapes"],
-    "angry": ["Rage Against the Machine", "Linkin Park heavy", "Aggressive workout rap"],
-    "heartbreak": ["Olivia Rodrigo sad", "Adele emotional", "Sad breakup songs"],
-    "lonely": ["Billie Eilish sad", "Passenger acoustic", "Melancholy indie acoustic"],
-    "melancholy": ["Zack Hemsey melancholic", "Interstellar theme ambient"],
-}
-
-MOOD_KEYWORDS = {
-    "ecstatic": ["ecstatic", "incredible", "best day", "pumped", "euphoric", "unstoppable", "electric"],
-    "happy": ["happy", "great", "wonderful", "joyful", "good mood", "cheerful", "feel good"],
-    "romantic": ["love", "romantic", "crush", "in love", "valentine", "sweetheart"],
-    "motivated": ["motivated", "grind", "hustle", "determined", "driven", "ambitious", "lets go"],
-    "calm": ["calm", "peaceful", "relax", "chill", "serene", "tranquil", "quiet"],
-    "nostalgic": ["nostalgic", "remember", "old times", "childhood", "memories", "throwback"],
-    "focused": ["focus", "study", "work", "concentrate", "coding", "homework", "lofi"],
-    "anxious": ["anxious", "nervous", "worried", "scared", "stressed", "panic"],
-    "angry": ["angry", "furious", "rage", "mad", "frustrated", "irritated", "pissed"],
-    "heartbreak": ["heartbreak", "breakup", "broke up", "left me", "dumped", "broken heart"],
-    "lonely": ["lonely", "alone", "isolated", "empty", "abandoned"],
-    "melancholy": ["sad", "depressed", "down", "unhappy", "cry", "upset", "pain"],
-}
-
-MOOD_MESSAGES = {
-    "ecstatic": "You're on top of the world! Here's something to match:",
-    "happy": "Love the good vibes! Here's something cheerful:",
-    "romantic": "Feeling the love? Here's something tender:",
-    "motivated": "Let's go! Here's something to fuel that drive:",
-    "calm": "Staying calm. Here's something peaceful:",
-    "nostalgic": "Taking a trip down memory lane:",
-    "focused": "In the zone! Here's something to keep you there:",
-    "anxious": "Take a breath. Here's something to ease your mind:",
-    "angry": "Let it out. Here's something intense:",
-    "heartbreak": "Going through it is tough. Here's music that gets it:",
-    "lonely": "You're not alone. Here's something that understands:",
-    "melancholy": "I feel you. Here's something that understands:",
-}
-
-MOOD_INTENSITY = {
-    "ecstatic": 10, "angry": 9, "motivated": 8, "heartbreak": 8,
-    "happy": 7, "anxious": 7, "romantic": 6, "lonely": 6,
-    "melancholy": 5, "nostalgic": 5, "focused": 4, "calm": 3
-}
-
 class MusicEngine:
     def __init__(self):
-        self.is_playing = False
-        self.played = set()
-        self.ytm = YTMusic()
-        logger.info("[MUSIC] MusicEngine initialized with YouTube Music!")
+        try:
+            self.ytm = YTMusic()
+            self.played = set()
+            logger.info("--- YouTube Music Engine Initialized ---")
+        except Exception as e:
+            logger.error(f"Failed to initialize YTMusic: {e}")
+            self.ytm = None
 
     def analyze_mood(self, text):
-        text = text.lower().strip()
-        scores = {}
-        for mood, keywords in MOOD_KEYWORDS.items():
-            score = sum(len(kw.split()) for kw in keywords if kw in text)
-            if score > 0:
-                scores[mood] = score
+        text = text.lower()
+        if any(w in text for w in ["sad", "cry", "depressed", "lonely", "heartbreak"]):
+            return "sad", 3
+        elif any(w in text for w in ["happy", "party", "dance", "celebrate", "excited"]):
+            return "happy", 8
+        elif any(w in text for w in ["focus", "study", "coding", "concentrate", "work"]):
+            return "focus", 5
+        return "neutral", 6
 
-        if scores:
-            best_mood = max(scores, key=scores.get)
-            intensity = MOOD_INTENSITY.get(best_mood, 5)
-            if any(b in text for b in ["very", "so", "really", "extremely", "totally"]):
-                intensity = min(intensity + 2, 10)
-            return best_mood, intensity
-
-        return "calm", 5
-
-    def search_ytmusic(self, mood, intensity):
-        queries = MOOD_QUERIES.get(mood, ["chill music"])
-        query = random.choice(queries)
-
+    def search_ytmusic(self, query_text):
+        if not self.ytm:
+            return None
+            
         try:
-            results = self.ytm.search(query, filter="songs", limit=10)
+            results = self.ytm.search(query_text, filter="songs", limit=10)
+            if not results:
+                results = self.ytm.search("pop hits", filter="songs", limit=10)
+            
             if not results:
                 return None
 
@@ -121,14 +68,15 @@ class MusicEngine:
 
     def process(self, text):
         mood, intensity = self.analyze_mood(text)
-        message = MOOD_MESSAGES.get(mood, "Here's some music for you:")
-
-        track = self.search_ytmusic(mood, intensity)
+        
+        track = self.search_ytmusic(text)
+        
+        message = f"Found this for '{text}':"
         if not track:
             return {
                 "type": "music",
                 "data": {
-                    "text": f"{message}\n\n 🎵 Chill Music\n 🎭 Mood: {mood.capitalize()}"
+                    "text": f"{message}\n\n 🎵 Chill Music\n 🎭 Query: {text}"
                 }
             }
 
@@ -142,7 +90,6 @@ class MusicEngine:
             f"{message}\n\n"
             f" 🎵 {title}\n"
             f" 👤 {uploader}\n"
-            f" 🎭 Mood     : {mood.capitalize()}\n"
             f" ⚡ Intensity : {intensity}/10\n"
             f" ⏱️  Duration  : {mins}:{secs:02d}\n"
         )
