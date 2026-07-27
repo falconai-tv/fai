@@ -29,19 +29,15 @@ class MusicEngine:
             return None
             
         try:
-            results = self.ytm.search(query_text, filter="songs", limit=10)
+            results = self.ytm.search(query_text, filter="songs", limit=5)
             if not results:
-                results = self.ytm.search("pop hits", filter="songs", limit=10)
+                results = self.ytm.search("pop hits", filter="songs", limit=5)
             
             if not results:
                 return None
 
-            fresh = [r for r in results if r.get("videoId") not in self.played]
-            if not fresh:
-                self.played.clear()
-                fresh = results
-
-            track = random.choice(fresh)
+            # Merr gjithmonë rezultatin e parë më të saktë nga kërkimi (Top Match)
+            track = results[0]
             video_id = track.get("videoId")
             self.played.add(video_id)
 
