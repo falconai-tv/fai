@@ -76,7 +76,7 @@ class Router:
                 "president", "ceo"
             ],
             "watch_movie": [
-                "movie", "film", "play", "tubi", "pluto", "cinema",
+                "movie", "film", "tubi", "pluto", "cinema",
                 "watch", "find me a movie"
             ],
             "greeting": [
@@ -110,7 +110,11 @@ class Router:
         start_time = time.time()
         cleaned = self.clean_input(user_input)
 
-        if any(w in cleaned for w in ["play movie", "watch movie", "film", "movie", "tubi"]):
+        if cleaned.startswith("play ") or "song" in cleaned or "music" in cleaned:
+            intent = "music_happy"
+            confidence = 1.0
+
+        elif any(w in cleaned for w in ["play movie", "watch movie", "film", "movie", "tubi"]):
             intent = "watch_movie"
             confidence = 1.0
 
@@ -242,14 +246,14 @@ class Router:
     def clean_input(self, text):
         text = text.lower().strip()
         replacements = {
-            "im ":      "i am ",
-            "i'm ":     "i am ",
-            "whats":    "what is",
-            "wanna":    "want to",
-            "focused":  "focus",
-            "pl":       "premier league",
-            "ucl":      "champions league",
-            "el":       "europa league",
+            "im ":     "i am ",
+            "i'm ":    "i am ",
+            "whats":   "what is",
+            "wanna":   "want to",
+            "focused": "focus",
+            "pl":      "premier league",
+            "ucl":     "champions league",
+            "el":      "europa league",
         }
         for k, v in replacements.items():
             text = text.replace(k, v)
