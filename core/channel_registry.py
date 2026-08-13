@@ -1,10 +1,6 @@
 from dataclasses import dataclass
 from typing import List, Optional
 
-
-# -------------------------
-# CHANNEL MODEL
-# -------------------------
 @dataclass
 class Channel:
     name: str
@@ -15,10 +11,6 @@ class Channel:
     tags: Optional[List[str]] = None
     is_live: bool = True
 
-
-# -------------------------
-# CHANNEL DATABASE
-# -------------------------
 CHANNELS = [
     Channel(
         name="DW News",
@@ -54,10 +46,6 @@ CHANNELS = [
     )
 ]
 
-
-# -------------------------
-# GET CHANNEL BY EXACT NAME
-# -------------------------
 def get_channel(name: str):
     name = name.strip().lower()
 
@@ -75,10 +63,6 @@ def get_channel(name: str):
 
     return None
 
-
-# -------------------------
-# CATEGORY FILTER
-# -------------------------
 def get_channels_by_category(category: str):
     category = category.lower()
     return [
@@ -95,10 +79,6 @@ def get_channels_by_category(category: str):
         if ch.category == category
     ]
 
-
-# -------------------------
-# TAG SEARCH
-# -------------------------
 def search_channels_by_tag(keyword: str):
     keyword = keyword.lower()
 
@@ -116,17 +96,9 @@ def search_channels_by_tag(keyword: str):
         if ch.tags and any(keyword in tag for tag in ch.tags)
     ]
 
-
-# -------------------------
-# NEWS CHANNELS
-# -------------------------
 def get_news_channels():
     return get_channels_by_category("news")
 
-
-# -------------------------
-# FUTURE EXTENSION (BALKAN)
-# -------------------------
 def get_balkan_channels():
     return [
         {
@@ -142,10 +114,6 @@ def get_balkan_channels():
         if ch.tags and "balkan" in ch.tags
     ]
 
-
-# -------------------------
-# BEST MATCH (SEMANTIC LIGHTWEIGHT)
-# -------------------------
 def find_best_channel(query: str):
     query = query.lower().strip()
 
@@ -156,17 +124,14 @@ def find_best_channel(query: str):
         score = 0
         name = ch.name.lower()
 
-        # exact name match
         if query == name:
             score += 10
         elif query in name:
             score += 5
 
-        # category match
         if ch.category in query:
             score += 2
 
-        # tag match
         if ch.tags:
             for tag in ch.tags:
                 if tag in query:
