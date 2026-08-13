@@ -57,3 +57,5 @@ class FalconBrain:
                 }
             }
         }
+
+Brain = FalconBrain
