@@ -2,7 +2,6 @@ import pytesseract
 import cv2
 import numpy as np
 
-
 class ChannelAI:
     def __init__(self):
         pass
