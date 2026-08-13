@@ -7,28 +7,28 @@ logger = logging.getLogger("FalconAI.WeatherEngine")
 API_KEY = "f8a26ced25d514b94ad2d1e61bca80e1"
 
 WEATHER_ICONS = {
-    "clear sky":          "☀️",
-    "few clouds":         "🌤️",
-    "scattered clouds":   "⛅",
-    "broken clouds":      "☁️",
-    "overcast clouds":    "☁️",
-    "light rain":         "🌦️",
-    "moderate rain":      "🌧️",
-    "heavy rain":         "🌧️",
+    "clear sky": "☀️",
+    "few clouds": "🌤️",
+    "scattered clouds": "⛅",
+    "broken clouds": "☁️",
+    "overcast clouds": "☁️",
+    "light rain": "🌦️",
+    "moderate rain": "🌧️",
+    "heavy rain": "🌧️",
     "heavy intensity rain": "🌧️",
-    "thunderstorm":       "⛈️",
-    "snow":               "❄️",
-    "light snow":         "🌨️",
+    "thunderstorm": "⛈️",
+    "snow": "❄️",
+    "light snow": "🌨️",
     "light intensity drizzle": "🌦️",
-    "drizzle":            "🌦️",
-    "mist":               "🌫️",
-    "fog":                "🌫️",
-    "haze":               "🌫️",
+    "drizzle": "🌦️",
+    "mist": "🌫️",
+    "fog": "🌫️",
+    "haze": "🌫️",
 }
 
 class WeatherEngine:
     def __init__(self, api_key=API_KEY):
-        self.api_key  = api_key
+        self.api_key = api_key
         self.base_url = "https://api.openweathermap.org/data/2.5/weather"
 
     def get_city_from_ip(self):
@@ -60,10 +60,10 @@ class WeatherEngine:
 
     def fetch_weather(self, city):
         response = requests.get(self.base_url, params={
-            "q":      city,
-            "appid":  self.api_key,
-            "units":  "metric",
-            "lang":   "en"
+            "q": city,
+            "appid": self.api_key,
+            "units": "metric",
+            "lang": "en"
         }, timeout=5)
 
         if response.status_code == 200:
@@ -73,10 +73,10 @@ class WeatherEngine:
         fallback_city = self.get_city_from_ip()
         
         response2 = requests.get(self.base_url, params={
-            "q":      fallback_city,
-            "appid":  self.api_key,
-            "units":  "metric",
-            "lang":   "en"
+            "q": fallback_city,
+            "appid": self.api_key,
+            "units": "metric",
+            "lang": "en"
         }, timeout=5)
 
         if response2.status_code == 200:
@@ -85,14 +85,14 @@ class WeatherEngine:
         return None
 
     def build_response(self, data):
-        city     = data["name"]
-        country  = data["sys"]["country"]
-        temp     = round(data["main"]["temp"])
-        feels    = round(data["main"]["feels_like"])
+        city = data["name"]
+        country = data["sys"]["country"]
+        temp = round(data["main"]["temp"])
+        feels = round(data["main"]["feels_like"])
         humidity = data["main"]["humidity"]
-        wind     = round(data["wind"]["speed"] * 3.6, 1)
-        desc     = data["weather"][0]["description"]
-        icon     = WEATHER_ICONS.get(desc, "🌡️")
+        wind = round(data["wind"]["speed"] * 3.6, 1)
+        desc = data["weather"][0]["description"]
+        icon = WEATHER_ICONS.get(desc, "🌡️")
 
         display = (
             f"\n{'='*38}\n"
@@ -117,24 +117,24 @@ class WeatherEngine:
         return {
             "type": "weather",
             "data": {
-                "city":        city,
-                "country":     country,
-                "temp":        temp,
-                "feels_like":  feels,
-                "humidity":    humidity,
-                "wind":        wind,
+                "city": city,
+                "country": country,
+                "temp": temp,
+                "feels_like": feels,
+                "humidity": humidity,
+                "wind": wind,
                 "description": desc,
-                "icon":        icon,
-                "text":        display,
-                "voice_text":  voice_text
+                "icon": icon,
+                "text": display,
+                "voice_text": voice_text
             }
         }
 
     def process(self, query):
         try:
             generic = ["weather today", "what is the weather", "how is the weather",
-                      "weather outside", "weather now", "current weather",
-                      "weather forecast", "tell me the weather"]
+                       "weather outside", "weather now", "current weather",
+                       "weather forecast", "tell me the weather"]
 
             if any(g in query.lower() for g in generic):
                 city = self.get_city_from_ip()
@@ -150,13 +150,22 @@ class WeatherEngine:
 
             result = self.build_response(raw)
 
-            speak(result["data"]["voice_text"])
+            try:
+                speak(result["data"]["voice_text"])
+            except Exception:
+                pass
 
             return result
 
         except Exception as e:
             logger.error(f"[WEATHER ERROR] {e}")
             return self.error_response(query)
+
+    def get_weather(self, query):
+        return self.process(query)
+
+    def get_forecast(self, query):
+        return self.process(query)
 
     def error_response(self, query):
         return {
