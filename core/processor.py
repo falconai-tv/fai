@@ -109,4 +109,4 @@ def process_response(result: dict):
         "meta": {
             "type": r_type
         }
-    }
+    } 
