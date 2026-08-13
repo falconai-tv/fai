@@ -10,7 +10,6 @@ from dataclasses import dataclass
 
 logger = logging.getLogger("FalconAI.ChannelPlayer")
 
-
 @dataclass
 class Channel:
     name: str
