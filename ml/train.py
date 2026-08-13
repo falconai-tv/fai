@@ -106,4 +106,4 @@ def train():
     print("model.pkl + vectorizer.pkl created")
 
 if __name__ == "__main__":
-    train()
+    train() 
