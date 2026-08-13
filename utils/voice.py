@@ -29,7 +29,7 @@ def get_cache_path(text):
 
 def detect_tone(text):
     text = text.lower()
-
+    
     if any(w in text for w in ["sad", "trisht", "keq", "depressed"]):
         return "calm"
 
