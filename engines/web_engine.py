@@ -51,22 +51,22 @@ class WebEngine:
         }
 
         self.movie_platforms = {
-            "tubi":    "https://tubitv.com/search/",
-            "pluto":   "https://pluto.tv/en/search/details/movies/",
+            "tubi": "https://tubitv.com/search/",
+            "pluto": "https://pluto.tv/en/search/details/movies/",
             "crackle": "https://www.crackle.com/search/",
             "rakuten": "https://www.rakuten.tv/it/search?q="
         }
 
         self.intent_category = {
-            "watch_news":        "world",
-            "watch_war":         "war",
+            "watch_news": "world",
+            "watch_war": "war",
             "watch_balkan_news": "balkan",
-            "tech_news":         "technology",
-            "sports_news":       "sports",
-            "business_news":     "business",
-            "person_search":     "world",
-            "weather_query":     "general",
-            "general_search":    "general"
+            "tech_news": "technology",
+            "sports_news": "sports",
+            "business_news": "business",
+            "person_search": "world",
+            "weather_query": "general",
+            "general_search": "general"
         }
 
     def process(self, text: str, intent: str = None, category: str = None):
@@ -81,6 +81,9 @@ class WebEngine:
         except Exception as e:
             logger.error(f"[WEB ERROR] {str(e)}")
             return self.error_response()
+
+    def search(self, text: str, intent: str = None, category: str = None):
+        return self.process(text, intent, category)
 
     def handle_movie_intent(self, query):
         movie_name = re.sub(
@@ -97,11 +100,11 @@ class WebEngine:
         return {
             "type": "web_movie",
             "data": {
-                "query":      movie_name,
-                "platform":   platform,
+                "query": movie_name,
+                "platform": platform,
                 "stream_url": search_url,
-                "auto_play":  True,
-                "falcon_ai":  f"Opening {movie_name} on {platform.capitalize()}. Sit back and enjoy!"
+                "auto_play": True,
+                "falcon_ai": f"Opening {movie_name} on {platform.capitalize()}. Sit back and enjoy!"
             }
         }
 
@@ -134,13 +137,13 @@ class WebEngine:
 
                 for item in root.findall(".//item"):
                     title = item.findtext("title", "")
-                    link  = item.findtext("link", "")
-                    desc  = item.findtext("description", "")
+                    link = item.findtext("link", "")
+                    desc = item.findtext("description", "")
 
                     if title and link:
                         articles.append({
-                            "title":       title,
-                            "link":        link,
+                            "title": title,
+                            "link": link,
                             "description": desc
                         })
 
@@ -204,7 +207,7 @@ class WebEngine:
 
         scored = []
         for article in articles:
-            text  = (article["title"] + " " + article.get("description", "")).lower()
+            text = (article["title"] + " " + article.get("description", "")).lower()
             score = sum(1 for kw in keywords if kw in text)
             if score > 0:
                 scored.append((score, article))
@@ -224,12 +227,12 @@ class WebEngine:
 
     def format_response(self, articles, query):
         response_text = f"Here's what's happening related to '{query}':\n\n"
-        voice_parts   = [f"Here's what's happening related to {query}."]
+        voice_parts = [f"Here's what's happening related to {query}."]
 
         for i, art in enumerate(articles, 1):
-            title     = art['title'].strip()
+            title = art['title'].strip()
             full_text = self.fetch_full_article(art['link'])
-            desc      = full_text if full_text else self.clean_description(art.get('description', ''))
+            desc = full_text if full_text else self.clean_description(art.get('description', ''))
 
             response_text += f"{i}. {title}\n"
             if desc:
@@ -241,9 +244,9 @@ class WebEngine:
         return {
             "type": "web",
             "data": {
-                "query":      query,
-                "articles":   articles,
-                "text":       response_text,
+                "query": query,
+                "articles": articles,
+                "text": response_text,
                 "voice_text": " ".join(voice_parts)
             }
         }
@@ -252,9 +255,9 @@ class WebEngine:
         return {
             "type": "web",
             "data": {
-                "query":    query,
+                "query": query,
                 "articles": [],
-                "text":     f"I couldn't find exact matches for '{query}', but try a broader topic."
+                "text": f"I couldn't find exact matches for '{query}', but try a broader topic."
             }
         }
 
