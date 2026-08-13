@@ -2,7 +2,6 @@ import re
 import unicodedata
 from typing import List
 
-
 class TextCleaner:
     def __init__(self):
         self.contractions = {
