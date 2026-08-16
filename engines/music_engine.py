@@ -150,6 +150,10 @@ class MusicEngine:
                     if title_match and artist_match:
                         local_file_path = os.path.join(self.download_dir, file)
                         print(f"\n[FalconAI Offline Engine]: Kënga u gjet në cache-in lokal!")
+
+                        filename = os.path.basename(local_file_path)
+                        print(f"[Stream Link]: http://127.0.0.1:8080/downloads/{filename}\n")
+                        
                         self.play_audio(local_file_path)
                         return
 
@@ -198,6 +202,13 @@ class MusicEngine:
                     self.embed_metadata(file_path, song_title, song_artist if song_artist else "FalconAI", image_path, lyrics_text)
 
                     print(f"\n[FalconAI Music Engine]: Kënga u shkarkua dhe u optimizua plotësisht.")
+
+                    if video_url and "youtube.com/watch" in video_url:
+                        print(f"[YouTube Link]: {video_url}")
+
+                    filename = os.path.basename(file_path)
+                    print(f"[Stream Link]: http://127.0.0.1:8080/downloads/{filename}\n")
+                    
                     self.play_audio(file_path)
                 else:
                     print(f"\n[MusicEngine]: Skedari u shkarkua por path-i nuk u gjet saktë.")
