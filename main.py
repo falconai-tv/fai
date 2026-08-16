@@ -1,7 +1,8 @@
 import os
 import sys
 import threading
-from flask import Flask, request, jsonify
+import time
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -86,6 +87,11 @@ def index():
         "version": "3.0.0"
     }), 200
 
+@app.route('/downloads/<path:filename>')
+def serve_downloaded_file(filename):
+    downloads_dir = os.path.join(BASE_DIR, "downloads")
+    return send_from_directory(downloads_dir, filename)
+
 @app.route('/debug/live', methods=['GET'])
 def debug_live():
     try:
@@ -154,6 +160,24 @@ def process_request():
 
         final_response = execution_result.get('response', response_data)
 
+        if route_name == "music" or response_data.get("intent") == "play_music":
+            if not isinstance(final_response, dict):
+                final_response = {"text": str(final_response)}
+            
+            downloads_dir = os.path.join(BASE_DIR, "downloads")
+            if os.path.exists(downloads_dir):
+                files = [os.path.join(downloads_dir, f) for f in os.listdir(downloads_dir) if f.endswith(".mp3")]
+                if files:
+                    latest_file = max(files, key=os.path.getctime)
+                    filename = os.path.basename(latest_file)
+                    
+                    if "data" not in final_response:
+                        final_response["data"] = {}
+                    
+                    host_url = request.host_url.rstrip('/')
+                    final_response["data"]["stream_url"] = f"{host_url}/downloads/{filename}"
+                    final_response["data"]["filename"] = filename
+
         if isinstance(final_response, dict) and 'status' not in final_response:
             final_response['status'] = 'success'
 
@@ -170,7 +194,7 @@ def process_request():
 def run_cli():
     print("\n" + "="*50)
     print(" FALCONAI V3 - TERMINAL TEST MODE")
-    print(" Shkruaj komandën tënde ose shkruaj 'exit' për të dalë.")
+    print(" Type your command or type 'exit' to quit.")
     print("="*50 + "\n")
 
     while True:
@@ -179,7 +203,7 @@ def run_cli():
             if not user_input:
                 continue
             if user_input.lower() in ("exit", "quit", "dalje"):
-                print("Duke u mbyllur... Mirupafshim!")
+                print("Shutting down... Goodbye!")
                 os._exit(0)
 
             clean_input = user_input.lower()
@@ -195,26 +219,57 @@ def run_cli():
                 if weather_engine:
                     try:
                         weather_res = weather_engine.get_weather(city) if hasattr(weather_engine, 'get_weather') else weather_engine.process(city)
-                        print(f"[Përgjigjja]:\n{weather_res.get('data', {}).get('text', weather_res)}\n")
+                        print(f"[Response]:\n{weather_res.get('data', {}).get('text', weather_res)}\n")
                         continue
                     except Exception as w_err:
-                        print(f"[Gabim moti]: {w_err}")
+                        print(f"[Weather Error]: {w_err}")
 
             if agent and executor:
                 response_data = agent.handle_request(user_input)
                 route_name = response_data.get("type", "unknown")
+
+                downloads_dir = os.path.join(BASE_DIR, "downloads")
+                os.makedirs(downloads_dir, exist_ok=True)
+                existing_files = set(os.listdir(downloads_dir))
+
                 execution_result = executor.execute_action(route_name, response_data)
                 
-                final_msg = execution_result.get('response', {}).get('message', response_data)
-                print(f"[Përgjigjja]: {final_msg}\n")
+                final_res = execution_result.get('response', response_data)
+                if isinstance(final_res, dict):
+                    output_msg = final_res.get('message', final_res.get('text', str(final_res)))
+                else:
+                    output_msg = str(final_res)
+                    
+                print(f"[Response]: {output_msg}")
+
+                if route_name == "music" or response_data.get("intent") == "play_music":
+                    def watch_download_and_print():
+                        for _ in range(20):
+                            time.sleep(0.5)
+                            current_files = set(os.listdir(downloads_dir))
+                            new_files = current_files - existing_files
+                            mp3_new = [f for f in new_files if f.endswith(".mp3")]
+                            if mp3_new:
+                                new_filename = mp3_new[0]
+                                print(f"[Stream Link]: http://127.0.0.1:8080/downloads/{new_filename}\n")
+                                break
+                            elif not new_files and len(current_files) > len(existing_files):
+                                all_mp3 = [os.path.join(downloads_dir, f) for f in current_files if f.endswith(".mp3")]
+                                if all_mp3:
+                                    latest_file = max(all_mp3, key=os.path.getctime)
+                                    print(f"[Stream Link]: http://127.0.0.1:8080/downloads/{os.path.basename(latest_file)}\n")
+                                    break
+
+                    threading.Thread(target=watch_download_and_print, daemon=True).start()
+                else:
+                    print()
             else:
-                print("[Gabim]: Sistemet nuk janë ngarkuar plotësisht.")
+                print("[Error]: Systems are not fully loaded.")
         except KeyboardInterrupt:
-            print("\nU ndërpre nga përdoruesi.")
+            print("\nInterrupted by user.")
             break
         except Exception as e:
-            print(f"[Gabim gjatë procesimit]: {e}\n")
-
+            print(f"[Processing Error]: {e}\n")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
