@@ -36,8 +36,8 @@ class MusicEngine:
 
         self.download_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "downloads")
         os.makedirs(self.download_dir, exist_ok=True)
-        
-        self.ffmpeg_path = "C:\\ffmpeg\\bin"
+
+        self.ffmpeg_path = "C:\\ffmpeg\\bin" if os.name == 'nt' else ""
 
     def embed_metadata(self, mp3_path: str, title: str, artist: str, image_path: str, lyrics: str = None):
         if not MUTAGEN_AVAILABLE:
@@ -90,7 +90,6 @@ class MusicEngine:
             if self.genius:
                 try:
                     print(f"\n[FalconAI Genius Engine]: Duke kërkuar tekstin/frazën te Genius...")
-
                     songs_search = self.genius.search_songs(search_query, per_page=1)
                     if songs_search and 'songs' in songs_search and len(songs_search['songs']) > 0:
                         top_hit = songs_search['songs'][0]
@@ -150,10 +149,8 @@ class MusicEngine:
                     if title_match and artist_match:
                         local_file_path = os.path.join(self.download_dir, file)
                         print(f"\n[FalconAI Offline Engine]: Kënga u gjet në cache-in lokal!")
-
                         filename = os.path.basename(local_file_path)
                         print(f"[Stream Link]: http://127.0.0.1:8080/downloads/{filename}\n")
-                        
                         self.play_audio(local_file_path)
                         return
 
@@ -161,7 +158,6 @@ class MusicEngine:
 
             ydl_opts = [
                 "yt-dlp",
-                "--ffmpeg-location", self.ffmpeg_path,
                 "--extractor-args", "youtube:player_client=android",
                 "-x", "--audio-format", "mp3",
                 "-o", output_template,
@@ -169,6 +165,9 @@ class MusicEngine:
                 "--no-update",
                 video_url
             ]
+            
+            if self.ffmpeg_path and os.path.exists(self.ffmpeg_path):
+                ydl_opts[1:1] = ["--ffmpeg-location", self.ffmpeg_path]
 
             process = subprocess.Popen(ydl_opts, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             stdout, stderr = process.communicate()
@@ -202,7 +201,6 @@ class MusicEngine:
                     self.embed_metadata(file_path, song_title, song_artist if song_artist else "FalconAI", image_path, lyrics_text)
 
                     print(f"\n[FalconAI Music Engine]: Kënga u shkarkua dhe u optimizua plotësisht.")
-
                     if video_url and "youtube.com/watch" in video_url:
                         print(f"[YouTube Link]: {video_url}")
 
