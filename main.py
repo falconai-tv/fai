@@ -154,29 +154,48 @@ def process_request():
                 except Exception as w_err:
                     logger.error(f"[Weather Direct Fallback Error]: {w_err}")
 
+        downloads_dir = os.path.join(BASE_DIR, "downloads")
+        os.makedirs(downloads_dir, exist_ok=True)
+        existing_files = set(os.listdir(downloads_dir))
+
         response_data = agent.handle_request(user_text)
         route_name = response_data.get("type", "unknown")
-        execution_result = executor.execute_action(route_name, response_data)
 
+        execution_result = executor.execute_action(route_name, response_data)
         final_response = execution_result.get('response', response_data)
 
         if route_name == "music" or response_data.get("intent") == "play_music":
             if not isinstance(final_response, dict):
                 final_response = {"text": str(final_response)}
             
-            downloads_dir = os.path.join(BASE_DIR, "downloads")
-            if os.path.exists(downloads_dir):
-                files = [os.path.join(downloads_dir, f) for f in os.listdir(downloads_dir) if f.endswith(".mp3")]
-                if files:
-                    latest_file = max(files, key=os.path.getctime)
-                    filename = os.path.basename(latest_file)
-                    
-                    if "data" not in final_response:
-                        final_response["data"] = {}
-                    
-                    host_url = request.host_url.rstrip('/')
-                    final_response["data"]["stream_url"] = f"{host_url}/downloads/{filename}"
-                    final_response["data"]["filename"] = filename
+            if "data" not in final_response:
+                final_response["data"] = {}
+
+            found_file = None
+            for _ in range(35):
+                time.sleep(0.2)
+                current_files = set(os.listdir(downloads_dir))
+                new_files = current_files - existing_files
+                mp3_new = [f for f in new_files if f.endswith(".mp3")]
+                
+                if mp3_new:
+                    found_file = mp3_new[0]
+                    break
+                else:
+                    all_mp3 = [f for f in current_files if f.endswith(".mp3")]
+                    if all_mp3:
+                        latest_file = max([os.path.join(downloads_dir, f) for f in all_mp3], key=os.path.getctime)
+                        if (time.time() - os.path.getctime(latest_file)) < 10:
+                            if os.path.getsize(latest_file) > 50000:
+                                found_file = os.path.basename(latest_file)
+                                break
+
+            if found_file:
+                host_url = request.host_url.rstrip('/')
+                final_response["data"]["stream_url"] = f"{host_url}/downloads/{found_file}"
+                final_response["data"]["filename"] = found_file
+            else:
+                final_response["data"]["stream_url"] = ""
 
         if isinstance(final_response, dict) and 'status' not in final_response:
             final_response['status'] = 'success'
@@ -225,12 +244,12 @@ def run_cli():
                         print(f"[Weather Error]: {w_err}")
 
             if agent and executor:
-                response_data = agent.handle_request(user_input)
-                route_name = response_data.get("type", "unknown")
-
                 downloads_dir = os.path.join(BASE_DIR, "downloads")
                 os.makedirs(downloads_dir, exist_ok=True)
                 existing_files = set(os.listdir(downloads_dir))
+
+                response_data = agent.handle_request(user_input)
+                route_name = response_data.get("type", "unknown")
 
                 execution_result = executor.execute_action(route_name, response_data)
                 
@@ -244,7 +263,7 @@ def run_cli():
 
                 if route_name == "music" or response_data.get("intent") == "play_music":
                     def watch_download_and_print():
-                        for _ in range(20):
+                        for _ in range(30):
                             time.sleep(0.5)
                             current_files = set(os.listdir(downloads_dir))
                             new_files = current_files - existing_files
@@ -253,7 +272,7 @@ def run_cli():
                                 new_filename = mp3_new[0]
                                 print(f"[Stream Link]: http://127.0.0.1:8080/downloads/{new_filename}\n")
                                 break
-                            elif not new_files and len(current_files) > len(existing_files):
+                            elif len(current_files) > len(existing_files):
                                 all_mp3 = [os.path.join(downloads_dir, f) for f in current_files if f.endswith(".mp3")]
                                 if all_mp3:
                                     latest_file = max(all_mp3, key=os.path.getctime)
