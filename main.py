@@ -66,10 +66,10 @@ try:
         weather_engine=weather_engine,
         sports_engine=sports_engine
     )
-    
+
     channel_ai = ChannelAI() if ChannelAI else None
     channel_player = ChannelPlayer(channels=sports_engine, channel_ai=channel_ai, web_engine=web_engine) if ChannelPlayer else None
-    
+
     executor = Executor(
         channel_player=channel_player,
         channel_ai=channel_ai
@@ -79,6 +79,7 @@ try:
 except Exception as e:
     logger.error(f"FATAL ERROR DURING BOOT: {str(e)}")
 
+
 @app.route('/')
 def index():
     return jsonify({
@@ -87,10 +88,12 @@ def index():
         "version": "3.0.0"
     }), 200
 
+
 @app.route('/downloads/<path:filename>')
 def serve_downloaded_file(filename):
     downloads_dir = os.path.join(BASE_DIR, "downloads")
     return send_from_directory(downloads_dir, filename)
+
 
 @app.route('/debug/live', methods=['GET'])
 def debug_live():
@@ -115,6 +118,30 @@ def debug_live():
         logger.error(f"Debug live error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/debug/music', methods=['GET'])
+def debug_music():
+    """
+    Quick isolated test for MusicEngine, bypassing agent/router/executor entirely.
+    Usage: GET /debug/music?q=don%20xhoni%20100%25
+    """
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify({"status": "error", "message": "Provide ?q=<song name>"}), 400
+
+    if music_engine is None:
+        return jsonify({"status": "error", "message": "music_engine is not initialized"}), 500
+
+    try:
+        logger.info(f"[/debug/music] Testing query: '{query}'")
+        result = music_engine.play(query)
+        logger.info(f"[/debug/music] Result: {result}")
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"[/debug/music] Exception: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @app.route('/process', methods=['POST', 'OPTIONS'])
 def process_request():
     if request.method == 'OPTIONS':
@@ -122,6 +149,7 @@ def process_request():
 
     try:
         if agent is None or executor is None or router is None:
+            logger.error("Core components not initialized (agent/executor/router is None)")
             return jsonify({
                 "status": "error",
                 "message": "FalconAI core components are not initialized properly. Check boot logs."
@@ -142,11 +170,11 @@ def process_request():
             city_query = clean_input
             for prefix in ["weather in", "weather", "moti ne", "moti në", "moti", "forecast for", "forecast"]:
                 city_query = city_query.replace(prefix, "")
-            
+
             city = city_query.strip()
             if not city:
                 city = "San Francisco"
-            
+
             if weather_engine:
                 try:
                     weather_res = weather_engine.get_weather(city) if hasattr(weather_engine, 'get_weather') else weather_engine.process(city)
@@ -154,16 +182,23 @@ def process_request():
                 except Exception as w_err:
                     logger.error(f"[Weather Direct Fallback Error]: {w_err}")
 
+        # --- Agent: figure out intent/type for this input ---
         response_data = agent.handle_request(user_text)
         route_name = response_data.get("type", "unknown")
+        logger.info(f"[Agent] route_name='{route_name}' intent='{response_data.get('intent')}' raw={response_data}")
 
+        # --- Executor: actually perform the action for that route ---
         execution_result = executor.execute_action(route_name, response_data)
+        logger.info(f"[Executor] execution_result={execution_result}")
+
         final_response = execution_result.get('response', response_data)
 
         if route_name == "music" or response_data.get("intent") == "play_music":
+            logger.info(f"[Music Branch] response_data={response_data} | final_response(before)={final_response}")
+
             if not isinstance(final_response, dict):
                 final_response = {"text": str(final_response)}
-            
+
             if "data" not in final_response:
                 final_response["data"] = {}
 
@@ -171,10 +206,14 @@ def process_request():
                 final_response["data"]["stream_url"] = response_data["audio_url"]
             elif "audio_url" in final_response:
                 final_response["data"]["stream_url"] = final_response["audio_url"]
+            else:
+                logger.info("[Music Branch] No audio_url found in response_data or final_response — "
+                            "this is likely why the 'could not generate link' message appears.")
 
         if isinstance(final_response, dict) and 'status' not in final_response:
             final_response['status'] = 'success'
 
+        logger.info(f"[Final Response] {final_response}")
         return jsonify(final_response), 200
 
     except Exception as e:
@@ -185,11 +224,12 @@ def process_request():
             "details": str(e)
         }), 500
 
+
 def run_cli():
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(" FALCONAI V3 - TERMINAL TEST MODE")
     print(" Type your command or type 'exit' to quit.")
-    print("="*50 + "\n")
+    print("=" * 50 + "\n")
 
     while True:
         try:
@@ -209,7 +249,7 @@ def run_cli():
                 city = city_query.strip()
                 if not city:
                     city = "Prishtina"
-                
+
                 if weather_engine:
                     try:
                         weather_res = weather_engine.get_weather(city) if hasattr(weather_engine, 'get_weather') else weather_engine.process(city)
@@ -223,7 +263,7 @@ def run_cli():
                 route_name = response_data.get("type", "unknown")
 
                 execution_result = executor.execute_action(route_name, response_data)
-                
+
                 final_res = execution_result.get('response', response_data)
                 if isinstance(final_res, dict):
                     output_msg = final_res.get('message', final_res.get('text', str(final_res)))
@@ -231,7 +271,7 @@ def run_cli():
                         print(f"[Stream Link]: {final_res['audio_url']}")
                 else:
                     output_msg = str(final_res)
-                    
+
                 print(f"[Response]: {output_msg}\n")
             else:
                 print("[Error]: Systems are not fully loaded.")
@@ -240,6 +280,7 @@ def run_cli():
             break
         except Exception as e:
             print(f"[Processing Error]: {e}\n")
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
